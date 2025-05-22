@@ -631,7 +631,3 @@ elif st.session_state.step == 8:
         
         st.dataframe(data_stats, use_container_width=True)
         
-        # Privacy controls
-        st.subheader("🔒 Privacy & Data Control")
-        data_sharing = st.checkbox("Share anonymized data for city planning", value=True)
-        location_tracking = st.selectbox("Location tracking",
