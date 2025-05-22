@@ -1,431 +1,637 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import datetime
 import plotly.express as px
-import folium
-from streamlit_folium import folium_static
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.preprocessing import StandardScaler
+import plotly.graph_objects as go
+from datetime import datetime, timedelta
+import time
+import random
 
-# Set page configuration
+# Configure page
 st.set_page_config(
-    page_title="MobiSync Prototype",
-    page_icon="🚦",
-    layout="wide"
+    page_title="Smart Transportation App",
+    page_icon="🚗",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# Custom CSS
-st.markdown("""
-<style>
-.title {
-    font-size: 2rem;
-    font-weight: bold;
-    color: #1E88E5;
-    text-align: center;
-}
-</style>
-""", unsafe_allow_html=True)
+# Initialize session state
+if 'step' not in st.session_state:
+    st.session_state.step = 1
+if 'user_profile' not in st.session_state:
+    st.session_state.user_profile = {}
+if 'routes_data' not in st.session_state:
+    st.session_state.routes_data = []
+if 'journey_active' not in st.session_state:
+    st.session_state.journey_active = False
+if 'sustainability_points' not in st.session_state:
+    st.session_state.sustainability_points = 0
 
-# Title
-st.markdown('<p class="title">🚦 MobiSync Platform Prototype</p>', unsafe_allow_html=True)
+# Mock data for demonstrations
+mock_routes = [
+    {
+        'mode': 'Driving', 'time': 25, 'cost': 8.50, 'co2': 4.2, 
+        'icon': '🚗', 'description': 'Direct route via Highway 101'
+    },
+    {
+        'mode': 'Carpool', 'time': 32, 'cost': 3.20, 'co2': 1.4, 
+        'icon': '👥', 'description': 'Share with 2 others, pickup nearby'
+    },
+    {
+        'mode': 'Public Transit', 'time': 45, 'cost': 4.00, 'co2': 0.8, 
+        'icon': '🚌', 'description': 'Bus + Light Rail combination'
+    },
+    {
+        'mode': 'Bike', 'time': 35, 'cost': 0.00, 'co2': 0.0, 
+        'icon': '🚲', 'description': 'Bike lanes available, slight uphill'
+    }
+]
 
-# -----------------------------
-# Data Generation Functions
-# -----------------------------
-
-def generate_traffic_data():
-    """Generate sample traffic data for demonstration"""
-    np.random.seed(42)
-    
-    # Current time and locations
-    now = datetime.datetime.now()
-    times = [now - datetime.timedelta(minutes=i*15) for i in range(24)]
-    times.reverse()
-    
-    cities = ["New York", "Los Angeles", "Chicago"]
-    roads = ["Main St", "Broadway", "Highway 101"]
-    
-    data = []
-    for time in times:
-        hour = time.hour
-        # Rush hour factor (8-10am, 4-6pm)
-        rush_factor = 2.0 if (8 <= hour <= 10 or 16 <= hour <= 18) else 1.0
-        
-        for city in cities:
-            for road in roads:
-                # Generate traffic metrics
-                traffic_volume = int(np.random.normal(500, 100) * rush_factor)
-                speed = max(5, int(np.random.normal(60, 15) / rush_factor))
-                congestion = min(10, max(1, int(np.random.normal(5, 2) * rush_factor)))
-                incident = np.random.random() < (0.05 * rush_factor)
-                
-                data.append({
-                    'timestamp': time,
-                    'city': city,
-                    'road_segment': road,
-                    'traffic_volume': traffic_volume,
-                    'average_speed': speed,
-                    'congestion_level': congestion,
-                    'incident_reported': incident
-                })
-    
-    return pd.DataFrame(data)
-
-def generate_predictions(df, hours=2):
-    """Generate future traffic predictions"""
-    last_time = df['timestamp'].max()
-    future_times = [last_time + datetime.timedelta(minutes=i*15) for i in range(1, hours*4+1)]
-    
-    future_data = []
-    for time in future_times:
-        hour = time.hour
-        rush_factor = 2.0 if (8 <= hour <= 10 or 16 <= hour <= 18) else 1.0
-        
-        for city in df['city'].unique():
-            for road in df['road_segment'].unique():
-                # Get recent data for this city/road
-                recent = df[(df['city'] == city) & (df['road_segment'] == road)].tail(5)
-                
-                if not recent.empty:
-                    # Base future values on recent trends
-                    base_congestion = recent['congestion_level'].mean()
-                    congestion = min(10, max(1, base_congestion * rush_factor + np.random.normal(0, 0.5)))
-                    
-                    future_data.append({
-                        'timestamp': time,
-                        'city': city,
-                        'road_segment': road,
-                        'congestion_level': int(congestion),
-                        'predicted': True
-                    })
-    
-    return pd.DataFrame(future_data)
-
-def optimize_route(start, end):
-    """Generate sample route options"""
-    routes = [
-        {
-            'name': 'Fastest Route',
-            'distance_km': np.random.uniform(8, 12),
-            'time_min': np.random.uniform(15, 25),
-            'congestion': np.random.uniform(0.6, 0.9)
-        },
-        {
-            'name': 'Shortest Route',
-            'distance_km': np.random.uniform(5, 9),
-            'time_min': np.random.uniform(20, 35),
-            'congestion': np.random.uniform(0.7, 1.0)
-        },
-        {
-            'name': 'Eco-Friendly Route',
-            'distance_km': np.random.uniform(7, 11),
-            'time_min': np.random.uniform(18, 28),
-            'congestion': np.random.uniform(0.5, 0.8)
-        }
-    ]
-    return routes
-
-def create_traffic_map(data, city=None):
-    """Create a simple traffic map with folium"""
-    if city:
-        city_data = data[data['city'] == city]
-        center = [40.7128, -74.0060]  # Default NYC
-    else:
-        city_data = data
-        center = [40.7128, -74.0060]
-    
-    # Create map
-    m = folium.Map(location=center, zoom_start=12, tiles="CartoDB positron")
-    
-    # Use latest data
-    latest = city_data[city_data['timestamp'] == city_data['timestamp'].max()]
-    
-    # Add markers
-    for _, row in latest.iterrows():
-        color = 'green' if row['congestion_level'] <= 3 else 'orange' if row['congestion_level'] <= 6 else 'red'
-        
-        popup = f"""
-        <b>{row['road_segment']}</b><br>
-        Congestion: {row['congestion_level']}/10<br>
-        Speed: {row.get('average_speed', 'N/A')} mph<br>
-        Time: {row['timestamp'].strftime('%H:%M')}
-        """
-        
-        folium.CircleMarker(
-            location=center,  # In a real app, use actual coordinates
-            radius=10,
-            color=color,
-            fill=True,
-            fill_opacity=0.7,
-            popup=popup
-        ).add_to(m)
-    
-    return m
-
-def train_basic_model(df):
-    """Train a basic prediction model"""
-    X = df[['traffic_volume', 'average_speed']].copy()
-    X['hour'] = df['timestamp'].dt.hour
-    X['day_of_week'] = df['timestamp'].dt.dayofweek
-    
-    y = df['congestion_level']
-    
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-    
-    model = RandomForestRegressor(n_estimators=50, random_state=42)
-    model.fit(X_scaled, y)
-    
-    return model, scaler, X.columns
-
-# -----------------------------
-# Main App
-# -----------------------------
+carpool_matches = [
+    {'name': 'Sarah M.', 'rating': 4.8, 'trips': 127, 'time': '8:15 AM', 'car': 'Toyota Prius'},
+    {'name': 'Mike R.', 'rating': 4.9, 'trips': 89, 'time': '8:20 AM', 'car': 'Honda Civic'},
+    {'name': 'Lisa K.', 'rating': 4.7, 'trips': 203, 'time': '8:10 AM', 'car': 'Tesla Model 3'}
+]
 
 # Sidebar navigation
-st.sidebar.title("Navigation")
-page = st.sidebar.radio("Select Page", ["Dashboard", "Traffic Visualization", "Congestion Prediction", "Route Optimization"])
+st.sidebar.title("🚗 Smart Transport")
+st.sidebar.markdown("---")
 
-# Load data
-traffic_data = generate_traffic_data()
-predictions = generate_predictions(traffic_data)
+step_names = [
+    "1. 👤 User Onboarding",
+    "2. 🗺️ Route Analysis", 
+    "3. 🌅 Morning Planning",
+    "4. 👥 Carpool Matching",
+    "5. 🛣️ Journey Monitoring",
+    "6. 💳 Payment Processing",
+    "7. 🌱 Sustainability Tracking",
+    "8. 🤖 AI Learning"
+]
 
-# City filter in sidebar
-cities = ["All Cities"] + sorted(traffic_data['city'].unique().tolist())
-selected_city = st.sidebar.selectbox("Select City", cities)
+selected_step = st.sidebar.selectbox("Navigate to Step:", step_names, index=st.session_state.step-1)
+st.session_state.step = step_names.index(selected_step) + 1
 
-# Filter data based on city selection
-if selected_city != "All Cities":
-    display_data = traffic_data[traffic_data['city'] == selected_city]
-    display_predictions = predictions[predictions['city'] == selected_city]
-else:
-    display_data = traffic_data
-    display_predictions = predictions
+# Progress bar
+progress = st.session_state.step / 8
+st.sidebar.progress(progress)
+st.sidebar.write(f"Progress: {progress:.0%}")
 
-# -----------------------------
-# Dashboard Page
-# -----------------------------
-if page == "Dashboard":
-    st.header("Traffic Dashboard")
-    
-    # KPIs
-    latest_data = display_data[display_data['timestamp'] == display_data['timestamp'].max()]
-    
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Avg. Congestion", f"{latest_data['congestion_level'].mean():.1f}/10")
-    with col2:
-        st.metric("Avg. Speed", f"{latest_data['average_speed'].mean():.1f} mph")
-    with col3:
-        st.metric("Traffic Volume", f"{int(latest_data['traffic_volume'].sum()):,}")
-    with col4:
-        st.metric("Incidents", f"{int(latest_data['incident_reported'].sum())}")
-    
-    # Traffic map
-    st.subheader("Current Traffic Map")
-    traffic_map = create_traffic_map(latest_data, selected_city if selected_city != "All Cities" else None)
-    folium_static(traffic_map, width=700)
-    
-    # Simple trend chart
-    st.subheader("Congestion Trend")
-    hourly_data = display_data.groupby(pd.Grouper(key='timestamp', freq='1H')).agg({
-        'congestion_level': 'mean'
-    }).reset_index()
-    
-    fig = px.line(
-        hourly_data, 
-        x='timestamp', 
-        y='congestion_level',
-        title="Average Congestion Level Over Time",
-        labels={'congestion_level': 'Congestion (1-10)', 'timestamp': 'Time'}
-    )
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Raw data
-    with st.expander("View Raw Data"):
-        st.dataframe(display_data.sort_values('timestamp', ascending=False))
+# Main content based on current step
+st.title("Smart Transportation Assistant")
 
-# -----------------------------
-# Traffic Visualization Page
-# -----------------------------
-elif page == "Traffic Visualization":
-    st.header("Traffic Visualization")
-    
-    viz_type = st.radio("Select Visualization", ["Traffic Heatmap", "Congestion Patterns"])
-    
-    if viz_type == "Traffic Heatmap":
-        st.subheader("Congestion Heatmap")
-        
-        # Create pivot table for heatmap
-        pivot = display_data.pivot_table(
-            index='road_segment',
-            columns=pd.Grouper(key='timestamp', freq='1H'),
-            values='congestion_level',
-            aggfunc='mean'
-        ).fillna(0)
-        
-        # Plot heatmap
-        fig = px.imshow(
-            pivot,
-            labels=dict(x="Time", y="Road Segment", color="Congestion"),
-            x=[col.strftime("%H:%M") for col in pivot.columns],
-            y=pivot.index,
-            color_continuous_scale="RdYlGn_r"
-        )
-        st.plotly_chart(fig, use_container_width=True)
-        
-    elif viz_type == "Congestion Patterns":
-        st.subheader("Congestion by Hour")
-        
-        # Group by hour
-        display_data['hour'] = display_data['timestamp'].dt.hour
-        hourly = display_data.groupby(['hour', 'road_segment']).agg({
-            'congestion_level': 'mean'
-        }).reset_index()
-        
-        # Plot hourly patterns
-        fig = px.line(
-            hourly,
-            x='hour',
-            y='congestion_level',
-            color='road_segment',
-            title="Congestion Patterns by Hour",
-            labels={'congestion_level': 'Congestion (1-10)', 'hour': 'Hour of Day'}
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-# -----------------------------
-# Congestion Prediction Page
-# -----------------------------
-elif page == "Congestion Prediction":
-    st.header("AI-Based Congestion Prediction")
-    
-    # Train model
-    model, scaler, feature_names = train_basic_model(traffic_data)
-    
-    # Interactive prediction tool
-    st.subheader("Predict Congestion")
+if st.session_state.step == 1:
+    st.header("Step 1: User Onboarding and Profile Creation")
     
     col1, col2 = st.columns(2)
+    
     with col1:
-        volume = st.slider("Traffic Volume", 100, 1000, 500, 50)
-        speed = st.slider("Speed (mph)", 5, 70, 35, 5)
+        st.subheader("Account Registration")
+        email = st.text_input("Email Address", placeholder="your.email@example.com")
+        phone = st.text_input("Phone Number", placeholder="+1 (555) 123-4567")
+        
+        if st.button("Send Verification"):
+            st.success("✅ Verification code sent!")
+            
+        verification_code = st.text_input("Verification Code", placeholder="Enter 6-digit code")
     
     with col2:
-        hour = st.slider("Hour of Day", 0, 23, 12)
-        incident = st.checkbox("Incident Reported", False)
+        st.subheader("Personal Details")
+        name = st.text_input("Full Name", placeholder="John Doe")
+        age = st.slider("Age", 18, 80, 30)
+        
+        st.subheader("Transportation Preferences")
+        cost_priority = st.slider("Cost Priority", 0, 100, 50)
+        time_priority = st.slider("Time Priority", 0, 100, 30)
+        env_priority = st.slider("Environmental Priority", 0, 100, 20)
     
-    # Prepare input for prediction
-    day_of_week = datetime.datetime.now().weekday()
-    input_data = pd.DataFrame({
-        'traffic_volume': [volume],
-        'average_speed': [speed],
-        'hour': [hour],
-        'day_of_week': [day_of_week]
-    })
+    st.subheader("Primary Locations")
+    home_address = st.text_input("🏠 Home Address", placeholder="123 Main St, City, State")
+    work_address = st.text_input("🏢 Work Address", placeholder="456 Business Ave, City, State")
     
-    # Make prediction
-    input_scaled = scaler.transform(input_data)
-    prediction = model.predict(input_scaled)[0]
+    st.subheader("Preferred Transport Modes")
+    transport_modes = st.multiselect(
+        "Select your preferred transportation methods:",
+        ["Driving", "Carpool", "Public Transit", "Walking", "Biking", "Ride-share"]
+    )
     
-    # Display prediction
-    st.subheader("Predicted Congestion Level")
-    st.markdown(f"""
-    <div style="text-align:center; font-size:3rem; font-weight:bold; 
-                color:{'green' if prediction <= 3 else 'orange' if prediction <= 6 else 'red'}">
-        {prediction:.1f}/10
-    </div>
-    """, unsafe_allow_html=True)
+    if st.button("Complete Profile Setup", type="primary"):
+        st.session_state.user_profile = {
+            'name': name, 'email': email, 'phone': phone,
+            'preferences': {'cost': cost_priority, 'time': time_priority, 'environment': env_priority},
+            'locations': {'home': home_address, 'work': work_address},
+            'transport_modes': transport_modes
+        }
+        st.success("🎉 Profile created successfully!")
+        st.balloons()
+
+elif st.session_state.step == 2:
+    st.header("Step 2: Initial Route Analysis and Learning")
     
-    # Interpretation
-    if prediction <= 3:
-        st.success("Low congestion expected. Traffic flowing freely.")
-    elif prediction <= 6:
-        st.warning("Moderate congestion. Some slowdowns possible.")
+    if st.session_state.user_profile:
+        st.info(f"Welcome back, {st.session_state.user_profile.get('name', 'User')}!")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("🗺️ Route Discovery")
+            st.write("Analyzing transportation options...")
+            
+            # Simulate route analysis
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            if st.button("Start Route Analysis"):
+                for i in range(101):
+                    progress_bar.progress(i)
+                    if i < 25:
+                        status_text.text("🚗 Analyzing driving routes...")
+                    elif i < 50:
+                        status_text.text("🚌 Checking public transit...")
+                    elif i < 75:
+                        status_text.text("👥 Finding carpool options...")
+                    else:
+                        status_text.text("🚲 Mapping bike paths...")
+                    time.sleep(0.02)
+                status_text.text("✅ Analysis complete!")
+                
+                # Store route data
+                st.session_state.routes_data = mock_routes
+        
+        with col2:
+            st.subheader("📊 Discovered Routes")
+            if st.session_state.routes_data:
+                for route in st.session_state.routes_data:
+                    with st.expander(f"{route['icon']} {route['mode']} - {route['time']} min"):
+                        col_a, col_b, col_c = st.columns(3)
+                        with col_a:
+                            st.metric("Time", f"{route['time']} min")
+                        with col_b:
+                            st.metric("Cost", f"${route['cost']:.2f}")
+                        with col_c:
+                            st.metric("CO2", f"{route['co2']} kg")
+                        st.write(route['description'])
     else:
-        st.error("Heavy congestion expected. Significant delays likely.")
-    
-    # Future predictions chart
-    st.subheader("Future Congestion Forecast")
-    
-    forecast_hours = st.slider("Forecast Hours", 1, 6, 2)
-    future_preds = generate_predictions(traffic_data, forecast_hours)
-    
-    if selected_city != "All Cities":
-        future_preds = future_preds[future_preds['city'] == selected_city]
-    
-    # Group by time
-    future_agg = future_preds.groupby('timestamp').agg({
-        'congestion_level': 'mean'
-    }).reset_index()
-    
-    # Plot forecast
-    fig = px.line(
-        future_agg,
-        x='timestamp',
-        y='congestion_level',
-        title="Predicted Average Congestion Level",
-        labels={'congestion_level': 'Congestion (1-10)', 'timestamp': 'Time'}
-    )
-    st.plotly_chart(fig, use_container_width=True)
+        st.warning("Please complete Step 1: User Onboarding first")
 
-# -----------------------------
-# Route Optimization Page
-# -----------------------------
-elif page == "Route Optimization":
-    st.header("Smart Route Optimization")
+elif st.session_state.step == 3:
+    st.header("Step 3: Smart Morning Planning and Recommendations")
     
-    st.subheader("Route Planner")
+    col1, col2 = st.columns([2, 1])
     
-    col1, col2 = st.columns(2)
     with col1:
-        st.markdown("**Starting Point**")
-        start_location = st.text_input("Enter start location", "City Center")
+        st.subheader("🌅 Today's Commute Recommendations")
+        
+        # Current conditions
+        st.write("**Current Conditions:**")
+        col_a, col_b, col_c, col_d = st.columns(4)
+        with col_a:
+            st.metric("Weather", "☀️ Sunny", "72°F")
+        with col_b:
+            st.metric("Traffic", "🟡 Moderate", "+5 min")
+        with col_c:
+            st.metric("Transit", "🟢 On Time", "Normal")
+        with col_d:
+            st.metric("Air Quality", "🟢 Good", "AQI 45")
+        
+        st.subheader("📱 Route Recommendations")
+        
+        # Create interactive route comparison
+        if st.session_state.routes_data:
+            df_routes = pd.DataFrame(st.session_state.routes_data)
+            
+            # Add recommended badge based on user preferences
+            if st.session_state.user_profile:
+                prefs = st.session_state.user_profile['preferences']
+                # Simple scoring algorithm
+                df_routes['score'] = (
+                    (100 - df_routes['time']) * prefs['time']/100 +
+                    (100 - df_routes['cost']*10) * prefs['cost']/100 +
+                    (100 - df_routes['co2']*20) * prefs['environment']/100
+                )
+                df_routes = df_routes.sort_values('score', ascending=False)
+            
+            for idx, route in df_routes.iterrows():
+                is_recommended = idx == df_routes.index[0] if st.session_state.user_profile else False
+                
+                with st.container():
+                    if is_recommended:
+                        st.success("⭐ RECOMMENDED")
+                    
+                    col_route1, col_route2, col_route3, col_route4, col_route5 = st.columns([1, 2, 1, 1, 1])
+                    
+                    with col_route1:
+                        st.write(f"## {route['icon']}")
+                    with col_route2:
+                        st.write(f"**{route['mode']}**")
+                        st.caption(route['description'])
+                    with col_route3:
+                        st.write(f"⏱️ {route['time']} min")
+                    with col_route4:
+                        st.write(f"💰 ${route['cost']:.2f}")
+                    with col_route5:
+                        st.write(f"🌱 {route['co2']} kg CO2")
+                    
+                    if st.button(f"Select {route['mode']}", key=f"select_{idx}"):
+                        st.session_state.selected_route = route
+                        st.success(f"✅ {route['mode']} selected!")
+                
+                st.divider()
     
     with col2:
-        st.markdown("**Destination**")
-        end_location = st.text_input("Enter destination", "Airport")
+        st.subheader("📅 Smart Departure")
+        
+        departure_time = st.time_input("Desired Arrival Time", value=datetime.strptime("09:00", "%H:%M").time())
+        
+        # Calculate suggested departure times
+        st.write("**Suggested Departure Times:**")
+        for route in mock_routes[:3]:
+            arrival_time = datetime.combine(datetime.today(), departure_time)
+            depart_time = arrival_time - timedelta(minutes=route['time'])
+            st.write(f"{route['icon']} {depart_time.strftime('%H:%M')} - {route['mode']}")
+        
+        st.subheader("📱 Notifications")
+        notify_traffic = st.checkbox("Traffic alerts", value=True)
+        notify_weather = st.checkbox("Weather updates", value=True)
+        notify_carpool = st.checkbox("Carpool matches", value=True)
+
+elif st.session_state.step == 4:
+    st.header("Step 4: Carpool Matching and Coordination")
     
-    # Route preferences
-    avoid_tolls = st.checkbox("Avoid toll roads", False)
-    avoid_highways = st.checkbox("Avoid highways", False)
+    st.subheader("🔍 Finding Carpool Matches...")
     
-    # Generate routes on button click
-    if st.button("Find Routes"):
-        st.subheader("Route Options")
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        # Matching criteria
+        st.write("**Matching Criteria:**")
+        col_a, col_b = st.columns(2)
+        with col_a:
+            max_detour = st.slider("Max detour (minutes)", 0, 15, 5)
+            time_flexibility = st.slider("Time flexibility (minutes)", 0, 30, 10)
+        with col_b:
+            gender_pref = st.selectbox("Gender preference", ["No preference", "Same gender", "Any"])
+            smoking_pref = st.selectbox("Smoking preference", ["Non-smoking only", "No preference"])
         
-        # Generate sample routes
-        routes = optimize_route(start_location, end_location)
+        st.subheader("👥 Available Matches")
         
-        # Display routes in table
-        route_data = []
-        for route in routes:
-            route_data.append({
-                "Route": route['name'],
-                "Distance (km)": f"{route['distance_km']:.1f}",
-                "Est. Time (min)": f"{route['time_min']:.1f}",
-                "Congestion": f"{int(route['congestion']*100)}%"
-            })
+        for idx, match in enumerate(carpool_matches):
+            with st.container():
+                col_match1, col_match2, col_match3, col_match4 = st.columns([1, 3, 2, 1])
+                
+                with col_match1:
+                    st.write("👤")
+                
+                with col_match2:
+                    st.write(f"**{match['name']}**")
+                    st.write(f"⭐ {match['rating']}/5.0 ({match['trips']} trips)")
+                    st.write(f"🚗 {match['car']}")
+                
+                with col_match3:
+                    st.write(f"🕐 Departure: {match['time']}")
+                    st.write("📍 0.3 miles from you")
+                    st.write("💰 $3.20 per trip")
+                
+                with col_match4:
+                    if st.button("Connect", key=f"connect_{idx}"):
+                        st.success(f"✅ Request sent to {match['name']}!")
+                        st.info("💬 You can now chat with your carpool partner")
+                
+                st.divider()
+    
+    with col2:
+        st.subheader("💬 Carpool Chat")
         
-        route_df = pd.DataFrame(route_data)
-        st.table(route_df)
+        if st.button("Demo Chat"):
+            st.chat_message("user").write("Hi! I saw we're matched for tomorrow's commute.")
+            st.chat_message("assistant").write("Great! I usually leave at 8:15 AM. Does that work for you?")
+            st.chat_message("user").write("Perfect! Where should we meet?")
+            st.chat_message("assistant").write("How about the Starbucks on Main St? It's easy to spot.")
         
-        # Show recommended route
-        st.subheader("Recommended Route")
+        st.subheader("🛡️ Safety Features")
+        st.write("✅ Background check verified")
+        st.write("✅ Phone number verified")
+        st.write("✅ Real-time GPS tracking")
+        st.write("✅ Emergency contact system")
+        st.write("✅ Rating system")
+
+elif st.session_state.step == 5:
+    st.header("Step 5: Real-Time Journey Monitoring and Adaptation")
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.subheader("🛣️ Live Journey Tracking")
         
-        # Simple recommendation logic
-        if avoid_highways and avoid_tolls:
-            best_route = routes[1]  # Shortest
+        # Journey status
+        if not st.session_state.journey_active:
+            if st.button("🚀 Start Journey", type="primary"):
+                st.session_state.journey_active = True
+                st.rerun()
         else:
-            best_route = routes[0]  # Fastest
+            st.success("🚗 Journey in progress...")
+            
+            # Create a mock real-time map
+            map_data = pd.DataFrame({
+                'lat': [37.7749 + i*0.01 for i in range(10)],
+                'lon': [-122.4194 + i*0.01 for i in range(10)]
+            })
+            
+            st.map(map_data)
+            
+            # Journey metrics
+            col_a, col_b, col_c, col_d = st.columns(4)
+            with col_a:
+                st.metric("Progress", "65%", "2 miles")
+            with col_b:
+                st.metric("ETA", "8:47 AM", "-3 min")
+            with col_c:
+                st.metric("Speed", "35 mph", "+5 mph")
+            with col_d:
+                st.metric("Fuel Saved", "$2.10", "+15%")
+            
+            # Real-time alerts
+            st.subheader("⚠️ Live Updates")
+            st.warning("🚧 Construction ahead - Alternate route suggested")
+            st.info("🌧️ Light rain expected in 10 minutes")
+            st.success("👥 Carpool partner picked up successfully")
+            
+            # Rerouting options
+            st.subheader("🔄 Route Adjustments")
+            col_route1, col_route2 = st.columns(2)
+            with col_route1:
+                st.write("**Current Route:** Highway 101")
+                st.write("⏱️ 12 min remaining")
+                st.write("🚧 Heavy traffic ahead")
+            with col_route2:
+                st.write("**Suggested Route:** Side streets")
+                st.write("⏱️ 10 min remaining")
+                st.write("✅ Clear traffic")
+                if st.button("Accept New Route"):
+                    st.success("🔄 Route updated!")
+            
+            if st.button("🏁 Complete Journey"):
+                st.session_state.journey_active = False
+                st.session_state.sustainability_points += 25
+                st.success("🎉 Journey completed successfully!")
+                st.balloons()
+                st.rerun()
+    
+    with col2:
+        st.subheader("📊 Journey Analytics")
         
-        st.success(f"""
-        **{best_route['name']}**
-        * Distance: {best_route['distance_km']:.1f} km
-        * Estimated Time: {best_route['time_min']:.1f} minutes
-        * Congestion Level: {int(best_route['congestion']*100)}%
-        """)
+        # Real-time charts
+        time_data = pd.DataFrame({
+            'Time': pd.date_range('8:00', periods=30, freq='1min'),
+            'Speed': np.random.normal(30, 10, 30).clip(0, 60)
+        })
         
-        # Future improvement notes
-        st.info("In a production app, this would show an interactive map with the routes.")
+        fig = px.line(time_data, x='Time', y='Speed', title='Speed Over Time')
+        st.plotly_chart(fig, use_container_width=True)
+        
+        st.subheader("🎯 Trip Efficiency")
+        st.metric("Time vs Predicted", "On time", "3 min early")
+        st.metric("Cost vs Budget", "$3.20", "Under budget")
+        st.metric("CO2 Saved", "2.8 kg", "vs driving alone")
+
+elif st.session_state.step == 6:
+    st.header("Step 6: Payment Processing and Cost Management")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("💳 Payment Dashboard")
+        
+        # Payment methods
+        st.write("**Payment Methods:**")
+        payment_method = st.radio(
+            "Select payment method:",
+            ["💳 Credit Card ****1234", "📱 Digital Wallet", "🏦 Bank Account", "💰 Transport Credits"]
+        )
+        
+        # Current trip cost
+        st.subheader("🧾 Current Trip")
+        trip_cost = 3.20
+        st.write(f"**Carpool with Sarah M.**")
+        col_cost1, col_cost2 = st.columns(2)
+        with col_cost1:
+            st.write("Base fare: $6.40")
+            st.write("Split 2 ways: $3.20")
+            st.write("Platform fee: $0.30")
+        with col_cost2:
+            st.write("Discount: -$0.50")
+            st.write("**Total: $3.00**")
+        
+        if st.button("💰 Process Payment", type="primary"):
+            st.success("✅ Payment processed successfully!")
+            st.info("💸 $3.00 charged to your credit card")
+            
+        # Auto-pay settings
+        st.subheader("⚙️ Auto-Pay Settings")
+        auto_pay = st.checkbox("Enable automatic payments", value=True)
+        spending_limit = st.slider("Daily spending limit", 0, 50, 20)
+        
+    with col2:
+        st.subheader("📊 Spending Analytics")
+        
+        # Monthly spending chart
+        months = ['Jan', 'Feb', 'Mar', 'Apr', 'May']
+        spending = [45, 52, 38, 41, 47]
+        
+        fig = go.Figure(data=go.Bar(x=months, y=spending))
+        fig.update_layout(title="Monthly Transportation Spending", yaxis_title="Amount ($)")
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Cost breakdown
+        st.subheader("💰 Cost Breakdown (This Month)")
+        cost_data = pd.DataFrame({
+            'Category': ['Carpool', 'Public Transit', 'Bike Share', 'Parking'],
+            'Amount': [28, 12, 3, 4],
+            'Trips': [8, 6, 2, 3]
+        })
+        
+        col_breakdown1, col_breakdown2 = st.columns(2)
+        with col_breakdown1:
+            fig_pie = px.pie(cost_data, values='Amount', names='Category', title='Spending by Category')
+            st.plotly_chart(fig_pie, use_container_width=True)
+        
+        with col_breakdown2:
+            st.dataframe(cost_data, use_container_width=True)
+        
+        # Savings summary
+        st.subheader("💡 Savings Summary")
+        st.metric("vs. Driving Alone", "$127", "This month")
+        st.metric("vs. Taxi/Rideshare", "$234", "This month")
+        st.metric("Total Saved (2024)", "$1,456", "+$234 this month")
+
+elif st.session_state.step == 7:
+    st.header("Step 7: Sustainability Tracking and Rewards")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("🌱 Environmental Impact")
+        
+        # Sustainability metrics
+        col_env1, col_env2, col_env3 = st.columns(3)
+        with col_env1:
+            st.metric("CO2 Saved", "45.2 kg", "This month")
+        with col_env2:
+            st.metric("Fuel Saved", "18.3 gal", "This month")
+        with col_env3:
+            st.metric("Trees Equivalent", "2.1 trees", "Planted")
+        
+        # Carbon footprint chart
+        st.subheader("📈 Carbon Footprint Trend")
+        dates = pd.date_range('2024-01-01', periods=12, freq='M')
+        co2_saved = np.random.normal(40, 10, 12).clip(20, 60)
+        
+        fig = px.line(x=dates, y=co2_saved, title='Monthly CO2 Savings (kg)')
+        fig.update_xaxis(title='Month')
+        fig.update_yaxis(title='CO2 Saved (kg)')
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Transport mode comparison
+        st.subheader("🚗 Transport Mode Impact")
+        mode_data = pd.DataFrame({
+            'Mode': ['Carpool', 'Public Transit', 'Biking', 'Walking'],
+            'CO2 per Trip (kg)': [1.4, 0.8, 0.0, 0.0],
+            'Trips This Month': [12, 8, 5, 3]
+        })
+        
+        fig = px.bar(mode_data, x='Mode', y='CO2 per Trip (kg)', 
+                     color='Trips This Month', title='CO2 Impact by Transport Mode')
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with col2:
+        st.subheader("🏆 Rewards & Achievements")
+        
+        # Points summary
+        points = st.session_state.sustainability_points + 450
+        st.metric("🎯 EcoPoints", f"{points:,}", "+25 today")
+        
+        # Achievement badges
+        st.write("**🏅 Recent Achievements:**")
+        achievements = [
+            {"badge": "🌟", "title": "Eco Warrior", "desc": "Saved 50kg CO2 this month"},
+            {"badge": "🚌", "title": "Transit Champion", "desc": "Used public transport 10 times"},
+            {"badge": "👥", "title": "Carpool Hero", "desc": "Completed 15 carpools"},
+            {"badge": "🚲", "title": "Bike Enthusiast", "desc": "Biked 50 miles total"}
+        ]
+        
+        for achievement in achievements:
+            with st.container():
+                col_ach1, col_ach2 = st.columns([1, 4])
+                with col_ach1:
+                    st.write(f"## {achievement['badge']}")
+                with col_ach2:
+                    st.write(f"**{achievement['title']}**")
+                    st.caption(achievement['desc'])
+                st.divider()
+        
+        # Rewards redemption
+        st.subheader("🎁 Redeem Rewards")
+        rewards = [
+            {"name": "Coffee Voucher", "points": 100, "desc": "Free coffee at local cafes"},
+            {"name": "Transit Pass", "points": 250, "desc": "$10 public transit credit"},
+            {"name": "Bike Tune-up", "points": 300, "desc": "Free bike maintenance"},
+            {"name": "Car Wash", "points": 200, "desc": "Premium car wash service"}
+        ]
+        
+        for reward in rewards:
+            col_rew1, col_rew2, col_rew3 = st.columns([3, 1, 1])
+            with col_rew1:
+                st.write(f"**{reward['name']}**")
+                st.caption(reward['desc'])
+            with col_rew2:
+                st.write(f"{reward['points']} pts")
+            with col_rew3:
+                can_redeem = points >= reward['points']
+                if st.button("Redeem" if can_redeem else "Need more", 
+                           key=f"redeem_{reward['name']}", 
+                           disabled=not can_redeem):
+                    st.success(f"🎉 {reward['name']} redeemed!")
+                    st.session_state.sustainability_points -= reward['points']
+        
+        # Leaderboard
+        st.subheader("🏆 Monthly Leaderboard")
+        leaderboard = pd.DataFrame({
+            'Rank': [1, 2, 3, 4, 5],
+            'User': ['You', 'Alex K.', 'Maria S.', 'John D.', 'Lisa M.'],
+            'Points': [points, 445, 387, 356, 334]
+        })
+        st.dataframe(leaderboard, use_container_width=True)
+
+elif st.session_state.step == 8:
+    st.header("Step 8: AI Learning and Continuous Improvement")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("🤖 AI Personal Assistant")
+        
+        st.write("**Learning from your behavior patterns:**")
+        
+        # User behavior analysis
+        behavior_insights = [
+            "🕐 You prefer leaving 10 minutes early for important meetings",
+            "🌧️ You choose carpool over biking when rain probability > 30%",
+            "💰 Cost becomes priority factor when monthly spending exceeds $40",
+            "🚌 You're 85% likely to take public transit on Fridays",
+            "👥 You prefer carpooling with users rated 4.5+ stars"
+        ]
+        
+        for insight in behavior_insights:
+            st.info(insight)
+        
+        # Predictive recommendations
+        st.subheader("🔮 Predictive Insights")
+        st.write("**Tomorrow's Recommendations:**")
+        
+        predictions = [
+            {"condition": "Heavy rain expected", "recommendation": "Suggest carpool over biking", "confidence": "94%"},
+            {"condition": "Traffic 15% heavier than usual", "recommendation": "Leave 8 minutes earlier", "confidence": "87%"},
+            {"condition": "Sarah M. available for carpool", "recommendation": "Match with preferred partner", "confidence": "96%"},
+            {"condition": "Friday afternoon pattern", "recommendation": "Public transit for return trip", "confidence": "85%"}
+        ]
+        
+        for pred in predictions:
+            with st.expander(f"📊 {pred['condition']} ({pred['confidence']} confidence)"):
+                st.write(f"**Recommendation:** {pred['recommendation']}")
+                st.progress(int(pred['confidence'][:-1])/100)
+    
+    with col2:
+        st.subheader("📊 ML Model Performance")
+        
+        # Model accuracy metrics
+        col_model1, col_model2 = st.columns(2)
+        with col_model1:
+            st.metric("Route Prediction", "92%", "+3%")
+            st.metric("Time Estimation", "87%", "+1%")
+        with col_model2:
+            st.metric("Carpool Matching", "89%", "+5%")
+            st.metric("Cost Optimization", "94%", "+2%")
+        
+        # Learning progress chart
+        st.subheader("📈 AI Learning Progress")
+        weeks = list(range(1, 13))
+        accuracy = [75, 78, 82, 85, 87, 89, 90, 91, 92, 92, 93, 94]
+        
+        fig = px.line(x=weeks, y=accuracy, title='Model Accuracy Over Time (%)')
+        fig.update_xaxis(title='Weeks')
+        fig.update_yaxis(title='Accuracy (%)')
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Data collection summary
+        st.subheader("📊 Data Collection Summary")
+        data_stats = pd.DataFrame({
+            'Data Type': ['Trip Routes', 'Time Preferences', 'Cost Patterns', 'Weather Correlations', 'Traffic Patterns'],
+            'Data Points': [1247, 892, 756, 423, 1156],
+            'Quality Score': [96, 94, 91, 89, 93]
+        })
+        
+        st.dataframe(data_stats, use_container_width=True)
+        
+        # Privacy controls
+        st.subheader("🔒 Privacy & Data Control")
+        data_sharing = st.checkbox("Share anonymized data for city planning", value=True)
+        location_tracking = st.selectbox("Location tracking",
