@@ -44,13 +44,13 @@ st.markdown("""
     border-radius: 0.5rem;
     margin-bottom: 1rem;
     border: 2px solid #4CAF50;
-    background-color: #f8fff8;
+    background-color: yellow;
 }
 .sustainability-card {
     padding: 1rem;
     border-radius: 0.5rem;
     margin-bottom: 1rem;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background-color: brown;
     color: white;
 }
 .reward-badge {
