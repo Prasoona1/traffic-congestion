@@ -1,4 +1,3 @@
-# Environmental impact overview with meaningful calculations
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -35,77 +34,45 @@ st.markdown("""
     text-align: center;
 }
 .route-card {
-    padding: 1.2rem;
-    border-radius: 12px;
+    padding: 1rem;
+    border-radius: 0.5rem;
     margin-bottom: 1rem;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-    border: none;
+    border-left: 4px solid #1E88E5;
 }
 .carpool-card {
-    padding: 1.2rem;
-    border-radius: 12px;
+    padding: 1rem;
+    border-radius: 0.5rem;
     margin-bottom: 1rem;
-    background: linear-gradient(135deg, #00C851 0%, #00FF7F 100%);
-    color: white;
-    box-shadow: 0 6px 20px rgba(0,200,81,0.3);
-    border: none;
+    border: 2px solid #4CAF50;
+    background-color: #f8fff8;
 }
 .sustainability-card {
-    padding: 1.2rem;
-    border-radius: 12px;
+    padding: 1rem;
+    border-radius: 0.5rem;
     margin-bottom: 1rem;
-    background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    box-shadow: 0 6px 20px rgba(255,107,53,0.3);
 }
 .reward-badge {
     display: inline-block;
-    padding: 0.4rem 1rem;
-    border-radius: 25px;
-    background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+    padding: 0.3rem 0.8rem;
+    border-radius: 20px;
+    background-color: #FFD700;
     color: #333;
     font-weight: bold;
-    margin: 0.3rem;
-    box-shadow: 0 3px 10px rgba(255,215,0,0.4);
+    margin: 0.2rem;
 }
 .eco-metrics {
     display: flex;
     justify-content: space-around;
-    padding: 1.5rem;
-    background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
-    border-radius: 15px;
+    padding: 1rem;
+    background-color: #e8f5e8;
+    border-radius: 0.5rem;
     margin: 1rem 0;
-    box-shadow: 0 4px 15px rgba(33,150,243,0.2);
 }
 .metric-item {
     text-align: center;
 }
-.metric-item h3 {
-    color: #1976D2;
-    font-size: 1.8rem;
-    margin-bottom: 0.3rem;
-}
-.savings-highlight {
-    padding: 1rem;
-    border-radius: 10px;
-    background: linear-gradient(135deg, #4CAF50 0%, #8BC34A 100%);
-    color: white;
-    margin: 0.5rem 0;
-    box-shadow: 0 4px 12px rgba(76,175,80,0.3);
-}
-.impact-card {
-    padding: 1rem;
-    border-radius: 10px;
-    margin: 0.5rem 0;
-    text-align: center;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.1);
-}
-.bright-blue { background: linear-gradient(135deg, #2196F3 0%, #03DAC6 100%); color: white; }
-.bright-purple { background: linear-gradient(135deg, #9C27B0 0%, #E91E63 100%); color: white; }
-.bright-orange { background: linear-gradient(135deg, #FF9800 0%, #FF5722 100%); color: white; }
-.bright-green { background: linear-gradient(135deg, #4CAF50 0%, #8BC34A 100%); color: white; }
-.bright-red { background: linear-gradient(135deg, #F44336 0%, #E91E63 100%); color: white; }
-.bright-teal { background: linear-gradient(135deg, #009688 0%, #00BCD4 100%); color: white; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -163,7 +130,7 @@ def generate_route_coords(start_coords, end_coords, variation=0.01):
     """Generate a list of coordinates forming a route between start and end"""
     dist_lat = end_coords[0] - start_coords[0]
     dist_lng = end_coords[1] - start_coords[1]
-    dist = np.sqrt(dist_lat**2 + dist_lng**2)
+    dist = np.sqrt(dist_lat*2 + dist_lng*2)
     num_points = max(5, int(dist * 100))
     
     route = []
@@ -266,69 +233,40 @@ def generate_carpool_options():
     
     return carpool_options
 
-# Function to calculate meaningful environmental impact and savings
+# Function to calculate environmental impact
 def calculate_environmental_impact(distance_km, transport_mode, passengers=1):
-    """Calculate realistic CO2 emissions, cost savings, and environmental impact"""
-    # Real-world CO2 emissions per km (kg) - based on EPA data
+    """Calculate CO2 emissions and savings"""
+    # CO2 emissions per km (kg)
     emissions_per_km = {
-        "solo_driving": 0.251,      # Average car emissions
-        "carpool_2": 0.1255,       # Split between 2 people
-        "carpool_3": 0.0837,       # Split between 3 people
-        "carpool_4": 0.0628,       # Split between 4 people
-        "public_transport": 0.089,  # Bus/train average
-        "eco_route": 0.201,        # 20% reduction through efficient driving
+        "solo_driving": 0.21,
+        "carpool_2": 0.105,  # Split between 2 people
+        "carpool_3": 0.07,   # Split between 3 people
+        "carpool_4": 0.0525, # Split between 4 people
+        "public_transport": 0.05,
         "bike": 0,
         "walk": 0
     }
     
-    # Cost calculations (realistic US averages)
-    gas_price_per_liter = 1.20  # $1.20 per liter
-    fuel_consumption_per_km = 0.08  # 8L/100km average
-    cost_per_km = gas_price_per_liter * fuel_consumption_per_km
-    
-    # Wear and tear, insurance, etc.
-    total_cost_per_km = cost_per_km * 1.5  # Total driving cost
-    
     solo_emissions = distance_km * emissions_per_km["solo_driving"]
-    solo_cost = distance_km * total_cost_per_km
-    
     mode_emissions = distance_km * emissions_per_km.get(transport_mode, emissions_per_km["solo_driving"])
-    
-    if "carpool" in transport_mode:
-        mode_cost = solo_cost / passengers  # Split costs
-    elif transport_mode == "public_transport":
-        mode_cost = distance_km * 0.15  # ~$0.15/km for public transport
-    else:
-        mode_cost = solo_cost
-    
-    co2_saved = max(0, solo_emissions - mode_emissions)
-    money_saved = max(0, solo_cost - mode_cost)
-    
-    # More accurate environmental equivalents
-    trees_equivalent = co2_saved / 21.77  # One tree absorbs 21.77kg CO2/year (US Forest Service)
-    coal_avoided = co2_saved / 2.23       # 1kg coal = 2.23kg CO2
-    miles_not_driven = co2_saved / 0.404  # 1 mile driving = 0.404kg CO2
+    co2_saved = solo_emissions - mode_emissions
     
     return {
-        "solo_emissions": round(solo_emissions, 3),
-        "mode_emissions": round(mode_emissions, 3),
-        "co2_saved": round(co2_saved, 3),
-        "money_saved": round(money_saved, 2),
-        "trees_equivalent": round(trees_equivalent, 2),
-        "coal_avoided_kg": round(coal_avoided, 2),
-        "equivalent_miles_saved": round(miles_not_driven, 1),
-        "gas_saved_liters": round((co2_saved / emissions_per_km["solo_driving"]) * fuel_consumption_per_km, 2)
+        "solo_emissions": solo_emissions,
+        "mode_emissions": mode_emissions,
+        "co2_saved": max(0, co2_saved),
+        "trees_equivalent": max(0, co2_saved / 22)  # 1 tree absorbs ~22kg CO2/year
     }
 
 # Main App Tabs
-tab1, tab2, tab3 = st.tabs(["🗺️ Route Planning", "🚗 Carpooling", "🌱 Sustainability Tracker"])
+tab1, tab2, tab3 = st.tabs(["🗺 Route Planning", "🚗 Carpooling", "🌱 Sustainability Tracker"])
 
 with tab1:
     st.header("Smart Route Optimization")
     
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("**Starting Point**")
+        st.markdown("*Starting Point*")
         start_location = st.selectbox(
             "Select start location", 
             ["City Center", "Downtown", "Midtown", "Brooklyn", "Queens", "Central Park"],
@@ -336,7 +274,7 @@ with tab1:
         )
 
     with col2:
-        st.markdown("**Destination**")
+        st.markdown("*Destination*")
         end_location = st.selectbox(
             "Select destination", 
             ["Airport", "Financial District", "Times Square", "Bronx", "Brooklyn", "Queens"],
@@ -365,114 +303,78 @@ with tab1:
         )
 
     if st.button("Find Routes", type="primary"):
-        # Generate sample routes using original logic
-        routes = generate_routes(
-            start_location, 
-            end_location, 
-            {"avoid_tolls": avoid_tolls, "avoid_highways": avoid_highways}
-        )
+        base_distance = 15 + random.uniform(-3, 3)
+        base_time = 25 + random.uniform(-5, 5)
         
-        # Create two columns for routes and map
+        routes = [
+            {
+                'name': 'Fastest Route',
+                'distance_km': base_distance + random.uniform(0, 2),
+                'time_min': base_time * (1.2 if avoid_highways else 1.0),
+                'congestion': random.uniform(0.6, 0.8),
+                'tolls': not avoid_tolls,
+                'highways': not avoid_highways,
+                'eco_rating': random.randint(6, 8)
+            },
+            {
+                'name': 'Eco-Friendly Route',
+                'distance_km': base_distance * 0.95,
+                'time_min': base_time * 1.15,
+                'congestion': random.uniform(0.4, 0.6),
+                'tolls': False,
+                'highways': False,
+                'eco_rating': random.randint(8, 10)
+            },
+            {
+                'name': 'Balanced Route',
+                'distance_km': base_distance * 1.05,
+                'time_min': base_time * 1.1,
+                'congestion': random.uniform(0.5, 0.7),
+                'tolls': random.choice([True, False]),
+                'highways': random.choice([True, False]),
+                'eco_rating': random.randint(7, 9)
+            }
+        ]
+        
         col1, col2 = st.columns([1, 2])
         
         with col1:
             st.subheader("Route Options")
             
-            # Display each route with more details and bright colors
             for i, route in enumerate(routes):
-                # Calculate meaningful environmental impact
-                transport_mode = "eco_route" if route['name'] == 'Eco-Friendly Route' else "solo_driving"
-                impact = calculate_environmental_impact(route['distance_km'], transport_mode)
+                # Calculate environmental impact
+                impact = calculate_environmental_impact(route['distance_km'], "solo_driving")
                 
-                if i == 0:  # Highlight recommended route
-                    card_class = "bright-blue"
+                if i == 0:
+                    card_color = "#38b6ff"
+                    text_color = "white"
                     recommended_text = "✅ RECOMMENDED"
                 elif route['name'] == 'Eco-Friendly Route':
-                    card_class = "bright-green"
+                    card_color = "#4CAF50"
+                    text_color = "white"
                     recommended_text = "🌱 ECO CHOICE"
                 else:
-                    card_class = "bright-orange"
+                    card_color = "#ff5757"
+                    text_color = "white"
                     recommended_text = ""
-                    
-                # Route card with detailed savings
+                
                 st.markdown(f"""
-                <div class="route-card {card_class}">
+                <div class="route-card" style="background-color: {card_color}; color: {text_color};">
                     <h4>{route['name']} {recommended_text}</h4>
                     <p>
-                    <strong>📍 Distance:</strong> {route['distance_km']:.1f} km<br>
-                    <strong>⏱️ Est. Time:</strong> {route['time_min']:.1f} minutes<br>
-                    <strong>🚦 Congestion:</strong> {int(route['congestion']*100)}%<br>
-                    <strong>💨 CO₂ Emissions:</strong> {impact['solo_emissions']:.2f} kg<br>
-                    <strong>💰 Estimated Cost:</strong> ${(route['distance_km'] * 0.144):.2f}<br>
-                    <strong>Features:</strong> {"Uses toll roads" if route['tolls'] else "No tolls"}, 
-                    {"Uses highways" if route['highways'] else "Avoids highways"}
+                    <strong>Distance:</strong> {route['distance_km']:.1f} km<br>
+                    <strong>Est. Time:</strong> {route['time_min']:.1f} minutes<br>
+                    <strong>Eco Rating:</strong> {route['eco_rating']}/10 🌱<br>
+                    <strong>CO₂ Emissions:</strong> {impact['solo_emissions']:.2f} kg<br>
+                    <strong>Features:</strong> {"Uses toll roads" if route['tolls'] else "No tolls"}
                     </p>
                 </div>
                 """, unsafe_allow_html=True)
-                
-                # Show savings for eco-friendly route
-                if route['name'] == 'Eco-Friendly Route':
-                    st.markdown(f"""
-                    <div class="savings-highlight">
-                        <strong>🌱 Environmental Savings:</strong><br>
-                        • {impact['co2_saved']:.2f} kg CO₂ saved<br>
-                        • Equivalent to {impact['equivalent_miles_saved']:.1f} miles not driven<br>
-                        • {impact['gas_saved_liters']:.1f} liters of fuel saved<br>
-                        • Equal to {impact['trees_equivalent']:.2f} trees planted
-                    </div>
-                    """, unsafe_allow_html=True)
         
         with col2:
             st.subheader("Route Map")
-            # Create and display the map using original function
             route_map = create_route_map(start_location, end_location, routes)
             folium_static(route_map, width=700, height=500)
-        
-        # Traffic conditions along the route (original logic)
-        st.subheader("Current Traffic Conditions")
-        
-        # Generate sample traffic incidents
-        incidents = []
-        if random.random() < 0.7:
-            incidents.append({
-                "type": "Accident",
-                "location": f"Near {random.choice(['Broadway', 'Main St', '5th Avenue'])}",
-                "delay": f"{random.randint(5, 20)} minutes",
-                "severity": "Moderate"
-            })
-        
-        if random.random() < 0.5:
-            incidents.append({
-                "type": "Construction",
-                "location": f"On {random.choice(['Highway 101', 'Bridge St', 'Downtown'])}",
-                "delay": f"{random.randint(3, 15)} minutes",
-                "severity": "Minor"
-            })
-        
-        # Display incidents
-        if incidents:
-            st.warning("⚠️ Traffic incidents detected on your route")
-            for incident in incidents:
-                st.markdown(f"**{incident['type']}** at {incident['location']} - Expected delay: {incident['delay']} ({incident['severity']} severity)")
-        else:
-            st.success("✅ No major incidents reported on your route")
-        
-        # Additional information
-        st.subheader("Additional Information")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("**Traffic Forecast**")
-            st.markdown("🔹 Traffic expected to improve in the next hour")
-            st.markdown("🔹 Rush hour congestion from 4:30 PM - 6:00 PM")
-        
-        with col2:
-            st.markdown("**Travel Tips**")
-            st.markdown("🔹 Consider departing after 6:30 PM to avoid traffic")
-            st.markdown("🔹 Check for updates before departure")
-    else:
-        # Show placeholder image when no routes are selected
-        st.image("https://via.placeholder.com/800x400.png?text=Route+Map+(Enter+locations+and+click+Find+Routes)", use_container_width=True)
 
 with tab2:
     st.header("🚗 Carpooling Hub")
@@ -480,28 +382,23 @@ with tab2:
     st.markdown("""
     <div class="eco-metrics">
         <div class="metric-item">
-            <h3>👥 {}</h3>
-            <p><strong>Carpools Joined</strong></p>
+            <h3>👥 12</h3>
+            <p>Carpools Joined</p>
         </div>
         <div class="metric-item">
-            <h3>💰 ${}</h3>
-            <p><strong>Money Saved</strong></p>
+            <h3>💰 $180</h3>
+            <p>Money Saved</p>
         </div>
         <div class="metric-item">
-            <h3>🌱 {}kg</h3>
-            <p><strong>CO₂ Reduced</strong></p>
+            <h3>🌱 25.3kg</h3>
+            <p>CO₂ Reduced</p>
         </div>
         <div class="metric-item">
-            <h3>⛽ {}L</h3>
-            <p><strong>Fuel Saved</strong></p>
+            <h3>⭐ 350</h3>
+            <p>Eco Points Earned</p>
         </div>
     </div>
-    """.format(
-        st.session_state.carpools_joined,
-        int(st.session_state.co2_saved * 2.8),  # Realistic money savings: ~$2.80 per kg CO2
-        st.session_state.co2_saved,
-        round(st.session_state.co2_saved * 3.98, 1)  # 1kg CO2 = ~3.98L fuel
-    ), unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
     
     # Carpool search
     col1, col2 = st.columns(2)
@@ -522,42 +419,26 @@ with tab2:
             col1, col2 = st.columns([3, 1])
             
             with col1:
-                # Calculate carpool savings
-                avg_distance = 18  # Average carpool distance
-                carpool_impact = calculate_environmental_impact(avg_distance, f"carpool_{option['available_seats']+1}")
-                
                 st.markdown(f"""
                 <div class="carpool-card">
                     <h4>🚗 {option['driver']} - {option['car']}</h4>
                     <p>
-                    ⭐ <strong>Rating:</strong> {option['rating']}/5.0 | 
-                    🕐 <strong>Departure:</strong> {option['departure_time']} | 
-                    👥 <strong>{option['available_seats']} seats</strong> available<br>
-                    💰 <strong>${option['cost_per_person']}/person</strong> | 
-                    🌱 <strong>+{option['eco_points']} EcoPoints</strong> | 
-                    📍 <strong>{option['route_match']}%</strong> route match
+                    ⭐ Rating: {option['rating']}/5.0 | 
+                    🕐 Departure: {option['departure_time']} | 
+                    👥 {option['available_seats']} seats available<br>
+                    💰 ${option['cost_per_person']}/person | 
+                    🌱 +{option['eco_points']} EcoPoints | 
+                    📍 {option['route_match']}% route match
                     </p>
-                    <div class="savings-highlight" style="margin-top: 0.8rem; background: rgba(255,255,255,0.2);">
-                        <strong>🌍 Your Environmental Impact:</strong><br>
-                        • Save {carpool_impact['co2_saved']:.1f} kg CO₂<br>
-                        • Save ${carpool_impact['money_saved']:.2f} in costs<br>
-                        • Equivalent to {carpool_impact['equivalent_miles_saved']:.0f} miles not driven
-                    </div>
                 </div>
                 """, unsafe_allow_html=True)
             
             with col2:
                 if st.button(f"Join Ride", key=f"join_{i}"):
-                    # Calculate realistic rewards
-                    co2_reduction = round(random.uniform(2.1, 4.8), 1)
-                    money_saved = round(co2_reduction * 2.8, 2)
-                    
                     st.session_state.user_points += option['eco_points']
                     st.session_state.carpools_joined += 1
-                    st.session_state.co2_saved += co2_reduction
-                    
+                    st.session_state.co2_saved += 2.5  # Estimated CO2 savings
                     st.success(f"🎉 Carpool booked with {option['driver']}!")
-                    st.success(f"💰 You'll save ${money_saved} and {co2_reduction}kg CO₂!")
                     st.balloons()
     
     # Option to offer a ride
@@ -622,7 +503,7 @@ with tab3:
     
     tips = [
         "🚗 Carpool 2+ times per week to reduce emissions by 50%",
-        "🚴‍♂️ Try bike routes for trips under 5km",
+        "🚴‍♂ Try bike routes for trips under 5km",
         "🚌 Use public transport during peak hours to avoid traffic",
         "⚡ Choose electric or hybrid vehicles for eco points bonus",
         "📱 Plan combined trips to reduce total distance traveled"
