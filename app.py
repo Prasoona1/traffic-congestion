@@ -66,7 +66,7 @@ st.markdown("""
     display: flex;
     justify-content: space-around;
     padding: 1rem;
-    background-color: pink;
+    background-color: brown;
     border-radius: 0.5rem;
     margin: 1rem 0;
 }
