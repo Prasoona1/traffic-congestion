@@ -1,7 +1,5 @@
 # Environmental impact overview with meaningful calculations
-   
-    
-    import streamlit as st
+import streamlit as st
 import pandas as pd
 import numpy as np
 import folium
