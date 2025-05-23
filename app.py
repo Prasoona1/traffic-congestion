@@ -1,644 +1,369 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import folium
-from streamlit_folium import folium_static
-from folium.features import DivIcon
-import random
+import plotly.graph_objects as go
+import plotly.express as px
 from datetime import datetime, timedelta
-import hashlib
+import random
 
-# Set page configuration
+# Page configuration
 st.set_page_config(
-    page_title="MobiSync Route Optimization",
-    page_icon="🚦",
-    layout="wide"
+    page_title="MobiSync - Smart Route Optimization",
+    page_icon="🚗",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# Initialize session state for user management and carpooling
-if 'users' not in st.session_state:
-    st.session_state.users = {}
-if 'current_user' not in st.session_state:
-    st.session_state.current_user = None
-if 'carpool_offers' not in st.session_state:
-    st.session_state.carpool_offers = []
-if 'carpool_requests' not in st.session_state:
-    st.session_state.carpool_requests = []
-
-# Custom CSS
+# Custom CSS for attractive styling
 st.markdown("""
 <style>
-.title {
-    font-size: 2rem;
-    font-weight: bold;
-    color: #1E88E5;
-    text-align: center;
-}
-.route-card {
-    padding: 1rem;
-    border-radius: 0.5rem;
-    margin-bottom: 1rem;
-}
-.user-card {
-    padding: 1rem;
-    border: 1px solid #ddd;
-    border-radius: 0.5rem;
-    margin-bottom: 0.5rem;
-    background-color: #f9f9f9;
-}
-.carpool-card {
-    padding: 1rem;
-    border: 1px solid #2E8B57;
-    border-radius: 0.5rem;
-    margin-bottom: 0.5rem;
-    background-color: #f0fff0;
-}
-.success-message {
-    padding: 0.5rem;
-    background-color: #d4edda;
-    border: 1px solid #c3e6cb;
-    border-radius: 0.25rem;
-    color: #155724;
-}
-.error-message {
-    padding: 0.5rem;
-    background-color: #f8d7da;
-    border: 1px solid #f5c6cb;
-    border-radius: 0.25rem;
-    color: #721c24;
-}
+    .main-header {
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        padding: 2rem;
+        border-radius: 15px;
+        margin-bottom: 2rem;
+        text-align: center;
+        color: white;
+    }
+    .route-card {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 15px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        border-left: 5px solid;
+        margin-bottom: 1rem;
+        transition: transform 0.2s;
+    }
+    .route-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    }
+    .savings-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1.5rem;
+        border-radius: 15px;
+        text-align: center;
+        margin-bottom: 1rem;
+    }
+    .reward-badge {
+        background: linear-gradient(45deg, #FFA726, #FF7043);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 25px;
+        display: inline-block;
+        margin: 0.2rem;
+        font-weight: bold;
+    }
+    .eco-points {
+        background: linear-gradient(45deg, #66BB6A, #43A047);
+        color: white;
+        padding: 1rem;
+        border-radius: 15px;
+        text-align: center;
+        font-size: 1.2rem;
+        font-weight: bold;
+    }
+    .metric-card {
+        background: white;
+        padding: 1rem;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        text-align: center;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# User Authentication Functions
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
-def register_user(username, email, password, phone, car_info=None):
-    if username in st.session_state.users:
-        return False, "Username already exists"
-    
-    st.session_state.users[username] = {
-        'email': email,
-        'password': hash_password(password),
-        'phone': phone,
-        'car_info': car_info,
-        'rating': 5.0,
-        'trips_completed': 0,
-        'registration_date': datetime.now()
+# Initialize session state for user data
+if 'eco_points' not in st.session_state:
+    st.session_state.eco_points = 1250
+if 'total_savings' not in st.session_state:
+    st.session_state.total_savings = {
+        'fuel': 45.2,
+        'money': 180.50,
+        'co2': 105.8,
+        'time': 420
     }
-    return True, "Registration successful"
+if 'trips_completed' not in st.session_state:
+    st.session_state.trips_completed = 73
 
-def login_user(username, password):
-    if username in st.session_state.users:
-        if st.session_state.users[username]['password'] == hash_password(password):
-            st.session_state.current_user = username
-            return True
-    return False
+# Header
+st.markdown("""
+<div class="main-header">
+    <h1>🚗 MobiSync Route Optimizer</h1>
+    <p>Save Fuel • Save Money • Save the Planet • Earn Rewards</p>
+</div>
+""", unsafe_allow_html=True)
 
-def logout_user():
-    st.session_state.current_user = None
-
-# Carpooling Functions
-def create_carpool_offer(driver, start_loc, end_loc, departure_time, seats_available, price_per_seat, notes=""):
-    offer = {
-        'id': len(st.session_state.carpool_offers) + 1,
-        'driver': driver,
-        'start_location': start_loc,
-        'end_location': end_loc,
-        'departure_time': departure_time,
-        'seats_available': seats_available,
-        'price_per_seat': price_per_seat,
-        'notes': notes,
-        'passengers': [],
-        'created_at': datetime.now(),
-        'status': 'active'
-    }
-    st.session_state.carpool_offers.append(offer)
-    return offer['id']
-
-def create_carpool_request(passenger, start_loc, end_loc, departure_time, max_price, notes=""):
-    request = {
-        'id': len(st.session_state.carpool_requests) + 1,
-        'passenger': passenger,
-        'start_location': start_loc,
-        'end_location': end_loc,
-        'departure_time': departure_time,
-        'max_price': max_price,
-        'notes': notes,
-        'created_at': datetime.now(),
-        'status': 'active'
-    }
-    st.session_state.carpool_requests.append(request)
-    return request['id']
-
-def join_carpool(offer_id, passenger):
-    for offer in st.session_state.carpool_offers:
-        if offer['id'] == offer_id and len(offer['passengers']) < offer['seats_available']:
-            offer['passengers'].append(passenger)
-            return True
-    return False
-
-# Route generation functions (keeping the original ones)
-def generate_route_coords(start_coords, end_coords, variation=0.01):
-    dist_lat = end_coords[0] - start_coords[0]
-    dist_lng = end_coords[1] - start_coords[1]
-    dist = np.sqrt(dist_lat**2 + dist_lng**2)
-    num_points = max(5, int(dist * 100))
+# Sidebar for user profile and achievements
+with st.sidebar:
+    st.markdown("### 👤 Your Profile")
     
-    route = []
-    for i in range(num_points + 1):
-        t = i / num_points
-        lat = start_coords[0] + t * dist_lat + random.uniform(-variation, variation)
-        lng = start_coords[1] + t * dist_lng + random.uniform(-variation, variation)
-        route.append([lat, lng])
+    # User level and points
+    st.markdown(f"""
+    <div class="eco-points">
+        🏆 Eco Warrior Level<br>
+        {st.session_state.eco_points} Points
+    </div>
+    """, unsafe_allow_html=True)
     
-    route[0] = start_coords
-    route[-1] = end_coords
-    return route
-
-def create_route_map(start_loc, end_loc, routes):
-    locations = {
-        "City Center": [40.712, -74.006],
-        "Airport": [40.640, -73.779],
-        "Downtown": [40.702, -74.015],
-        "Midtown": [40.754, -73.984],
-        "Brooklyn": [40.678, -73.944],
-        "Queens": [40.728, -73.794],
-        "Bronx": [40.837, -73.846],
-        "Central Park": [40.785, -73.968],
-        "Times Square": [40.758, -73.985],
-        "Financial District": [40.707, -74.011]
-    }
-    
-    start_coords = locations.get(start_loc, locations["City Center"])
-    end_coords = locations.get(end_loc, locations["Airport"])
-    
-    center_lat = (start_coords[0] + end_coords[0]) / 2
-    center_lng = (start_coords[1] + end_coords[1]) / 2
-    route_map = folium.Map(location=[center_lat, center_lng], zoom_start=12, tiles="CartoDB positron")
-    
-    folium.Marker(
-        location=start_coords,
-        popup=start_loc,
-        icon=folium.Icon(color="green", icon="play", prefix="fa"),
-        tooltip=f"Start: {start_loc}"
-    ).add_to(route_map)
-    
-    folium.Marker(
-        location=end_coords,
-        popup=end_loc,
-        icon=folium.Icon(color="red", icon="stop", prefix="fa"),
-        tooltip=f"End: {end_loc}"
-    ).add_to(route_map)
-    
-    colors = ["blue", "purple", "orange"]
-    
-    for i, route in enumerate(routes):
-        variation = 0.005 * (i + 1)
-        route_coords = generate_route_coords(start_coords, end_coords, variation)
-        
-        folium.PolyLine(
-            route_coords,
-            color=colors[i % len(colors)],
-            weight=4,
-            opacity=0.8,
-            tooltip=f"{route['name']} - {route['time_min']:.1f} min"
-        ).add_to(route_map)
-    
-    return route_map
-
-def generate_routes(start, end, preferences):
-    avoid_tolls = preferences.get("avoid_tolls", False)
-    avoid_highways = preferences.get("avoid_highways", False)
-    
-    base_distance = 15 + random.uniform(-3, 3)
-    base_time = 25 + random.uniform(-5, 5)
-    
-    routes = [
-        {
-            'name': 'Fastest Route',
-            'distance_km': base_distance + random.uniform(0, 2),
-            'time_min': base_time * (1.2 if avoid_highways else 1.0),
-            'congestion': random.uniform(0.6, 0.8),
-            'tolls': not avoid_tolls,
-            'highways': not avoid_highways
-        },
-        {
-            'name': 'Shortest Route',
-            'distance_km': base_distance * 0.85,
-            'time_min': base_time * 1.2,
-            'congestion': random.uniform(0.7, 0.9),
-            'tolls': False,
-            'highways': False
-        },
-        {
-            'name': 'Eco-Friendly Route',
-            'distance_km': base_distance * 1.1,
-            'time_min': base_time * 1.1,
-            'congestion': random.uniform(0.5, 0.7),
-            'tolls': random.choice([True, False]),
-            'highways': random.choice([True, False])
-        }
+    st.markdown("### 🎖️ Achievements")
+    achievements = [
+        {"name": "Fuel Saver", "icon": "⛽", "unlocked": True},
+        {"name": "Eco Champion", "icon": "🌱", "unlocked": True},
+        {"name": "Time Master", "icon": "⏰", "unlocked": True},
+        {"name": "Green Warrior", "icon": "🏆", "unlocked": True},
+        {"name": "Planet Protector", "icon": "🌍", "unlocked": st.session_state.eco_points >= 2000}
     ]
     
-    return routes
-
-# -----------------------------
-# Main App
-# -----------------------------
-
-# Title
-st.markdown('<p class="title">🚦 MobiSync Route Optimization & Carpooling</p>', unsafe_allow_html=True)
-
-# Sidebar for user authentication
-with st.sidebar:
-    st.header("User Account")
-    
-    if st.session_state.current_user is None:
-        # Login/Register tabs
-        tab1, tab2 = st.tabs(["Login", "Register"])
-        
-        with tab1:
-            st.subheader("Login")
-            login_username = st.text_input("Username", key="login_user")
-            login_password = st.text_input("Password", type="password", key="login_pass")
-            
-            if st.button("Login"):
-                if login_user(login_username, login_password):
-                    st.success("Login successful!")
-                    st.rerun()
-                else:
-                    st.error("Invalid username or password")
-        
-        with tab2:
-            st.subheader("Register")
-            reg_username = st.text_input("Username", key="reg_user")
-            reg_email = st.text_input("Email", key="reg_email")
-            reg_password = st.text_input("Password", type="password", key="reg_pass")
-            reg_phone = st.text_input("Phone Number", key="reg_phone")
-            
-            st.write("**Car Information (Optional)**")
-            car_make = st.text_input("Car Make/Model", key="car_make")
-            car_year = st.number_input("Year", min_value=1990, max_value=2024, value=2020, key="car_year")
-            car_seats = st.number_input("Available Seats", min_value=1, max_value=8, value=4, key="car_seats")
-            
-            if st.button("Register"):
-                if reg_username and reg_email and reg_password and reg_phone:
-                    car_info = None
-                    if car_make:
-                        car_info = {
-                            'make_model': car_make,
-                            'year': car_year,
-                            'seats': car_seats
-                        }
-                    
-                    success, message = register_user(reg_username, reg_email, reg_password, reg_phone, car_info)
-                    if success:
-                        st.success(message)
-                    else:
-                        st.error(message)
-                else:
-                    st.error("Please fill in all required fields")
-    
-    else:
-        # User is logged in
-        user_info = st.session_state.users[st.session_state.current_user]
-        st.success(f"Welcome, {st.session_state.current_user}!")
-        st.write(f"**Email:** {user_info['email']}")
-        st.write(f"**Rating:** ⭐ {user_info['rating']:.1f}")
-        st.write(f"**Trips Completed:** {user_info['trips_completed']}")
-        
-        if st.button("Logout"):
-            logout_user()
-            st.rerun()
-
-# Main content
-if st.session_state.current_user is None:
-    st.warning("Please login or register to access all features")
-    st.info("You can still use basic route planning without an account")
-
-# Navigation
-if st.session_state.current_user:
-    nav_option = st.selectbox(
-        "Select Feature:",
-        ["Route Planning", "Offer Carpool", "Find Carpool", "My Carpools", "Browse Community"]
-    )
-else:
-    nav_option = "Route Planning"
-
-# Route Planning (available to all users)
-if nav_option == "Route Planning":
-    st.header("Smart Route Optimization")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("**Starting Point**")
-        start_location = st.selectbox(
-            "Select start location", 
-            ["City Center", "Downtown", "Midtown", "Brooklyn", "Queens", "Central Park"],
-            index=0
-        )
-
-    with col2:
-        st.markdown("**Destination**")
-        end_location = st.selectbox(
-            "Select destination", 
-            ["Airport", "Financial District", "Times Square", "Bronx", "Brooklyn", "Queens"],
-            index=0
-        )
-
-    st.subheader("Route Preferences")
-    col1, col2 = st.columns(2)
-    with col1:
-        avoid_tolls = st.checkbox("Avoid toll roads", False)
-        avoid_highways = st.checkbox("Avoid highways", False)
-
-    with col2:
-        optimize_for = st.radio(
-            "Optimize for:",
-            ["Time", "Distance", "Eco-Friendly"],
-            index=0
-        )
-        
-        departure_time = st.selectbox(
-            "Departure time:",
-            ["Now", "In 30 minutes", "In 1 hour", "In 2 hours"],
-            index=0
-        )
-
-    if st.button("Find Routes", type="primary"):
-        routes = generate_routes(
-            start_location, 
-            end_location, 
-            {"avoid_tolls": avoid_tolls, "avoid_highways": avoid_highways}
-        )
-        
-        col1, col2 = st.columns([1, 2])
-        
-        with col1:
-            st.subheader("Route Options")
-            
-            for i, route in enumerate(routes):
-                if i == 0:
-                    card_color = "#38b6ff"
-                    text_color = "white"
-                    recommended_text = "✅ RECOMMENDED"
-                elif i == 1:
-                    card_color = "#ff5757"
-                    text_color = "white"
-                    recommended_text = ""
-                else:
-                    card_color = "#57e964"
-                    text_color = "white"
-                    recommended_text = ""
-                    
-                st.markdown(f"""
-                <div class="route-card" style="background-color: {card_color}; color: {text_color};">
-                    <h4>{route['name']} {recommended_text}</h4>
-                    <p>
-                    <strong>Distance:</strong> {route['distance_km']:.1f} km<br>
-                    <strong>Est. Time:</strong> {route['time_min']:.1f} minutes<br>
-                    <strong>Congestion:</strong> {int(route['congestion']*100)}%<br>
-                    <strong>Features:</strong> {"Uses toll roads" if route['tolls'] else "No tolls"}, 
-                    {"Uses highways" if route['highways'] else "Avoids highways"}
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
-        
-        with col2:
-            st.subheader("Route Map")
-            route_map = create_route_map(start_location, end_location, routes)
-            folium_static(route_map, width=700, height=500)
-        
-        # Show carpooling suggestions if user is logged in
-        if st.session_state.current_user:
-            st.subheader("💡 Carpooling Suggestions")
-            matching_offers = [offer for offer in st.session_state.carpool_offers 
-                             if offer['start_location'] == start_location and offer['end_location'] == end_location
-                             and offer['status'] == 'active' and len(offer['passengers']) < offer['seats_available']]
-            
-            if matching_offers:
-                st.success(f"Found {len(matching_offers)} carpool option(s) for your route!")
-                for offer in matching_offers[:3]:  # Show top 3
-                    st.markdown(f"""
-                    <div class="carpool-card">
-                        <strong>Driver:</strong> {offer['driver']} ⭐ {st.session_state.users.get(offer['driver'], {}).get('rating', 5.0):.1f}<br>
-                        <strong>Departure:</strong> {offer['departure_time']}<br>
-                        <strong>Available Seats:</strong> {offer['seats_available'] - len(offer['passengers'])}<br>
-                        <strong>Price per Seat:</strong> ${offer['price_per_seat']:.2f}<br>
-                        <strong>Notes:</strong> {offer['notes'] or 'None'}
-                    </div>
-                    """, unsafe_allow_html=True)
-            else:
-                st.info("No carpooling options found for this route. Consider creating an offer!")
-
-# Carpool Offering (registered users only)
-elif nav_option == "Offer Carpool":
-    st.header("🚗 Offer a Carpool Ride")
-    
-    user_info = st.session_state.users[st.session_state.current_user]
-    if not user_info.get('car_info'):
-        st.warning("Please update your profile with car information to offer rides")
-        st.stop()
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        offer_start = st.selectbox("Starting Point", 
-            ["City Center", "Downtown", "Midtown", "Brooklyn", "Queens", "Central Park", "Times Square", "Financial District"])
-        offer_date = st.date_input("Departure Date", datetime.now().date())
-        offer_seats = st.number_input("Available Seats", min_value=1, max_value=user_info['car_info']['seats'], value=3)
-    
-    with col2:
-        offer_end = st.selectbox("Destination", 
-            ["Airport", "Financial District", "Times Square", "Bronx", "Brooklyn", "Queens", "City Center", "Downtown"])
-        offer_time = st.time_input("Departure Time", datetime.now().time())
-        offer_price = st.number_input("Price per Seat ($)", min_value=0.0, value=10.0, step=0.50)
-    
-    offer_notes = st.text_area("Additional Notes (optional)", placeholder="e.g., No smoking, music preferences, pickup points...")
-    
-    if st.button("Create Carpool Offer", type="primary"):
-        departure_datetime = f"{offer_date} {offer_time}"
-        offer_id = create_carpool_offer(
-            st.session_state.current_user, offer_start, offer_end, 
-            departure_datetime, offer_seats, offer_price, offer_notes
-        )
-        st.success(f"Carpool offer created successfully! Offer ID: {offer_id}")
-
-# Find Carpool (registered users only)
-elif nav_option == "Find Carpool":
-    st.header("🔍 Find a Carpool Ride")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        search_start = st.selectbox("From", 
-            ["City Center", "Downtown", "Midtown", "Brooklyn", "Queens", "Central Park", "Times Square", "Financial District"])
-        search_date = st.date_input("Travel Date", datetime.now().date())
-    
-    with col2:
-        search_end = st.selectbox("To", 
-            ["Airport", "Financial District", "Times Square", "Bronx", "Brooklyn", "Queens", "City Center", "Downtown"])
-        max_price = st.number_input("Maximum Price per Seat ($)", min_value=0.0, value=20.0, step=0.50)
-    
-    if st.button("Search Rides"):
-        matching_offers = [offer for offer in st.session_state.carpool_offers 
-                          if offer['start_location'] == search_start and offer['end_location'] == search_end
-                          and offer['price_per_seat'] <= max_price and offer['status'] == 'active'
-                          and len(offer['passengers']) < offer['seats_available']]
-        
-        if matching_offers:
-            st.success(f"Found {len(matching_offers)} available ride(s)!")
-            
-            for offer in matching_offers:
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    driver_rating = st.session_state.users.get(offer['driver'], {}).get('rating', 5.0)
-                    driver_trips = st.session_state.users.get(offer['driver'], {}).get('trips_completed', 0)
-                    
-                    st.markdown(f"""
-                    <div class="carpool-card">
-                        <strong>Driver:</strong> {offer['driver']} ⭐ {driver_rating:.1f} ({driver_trips} trips)<br>
-                        <strong>Route:</strong> {offer['start_location']} → {offer['end_location']}<br>
-                        <strong>Departure:</strong> {offer['departure_time']}<br>
-                        <strong>Available Seats:</strong> {offer['seats_available'] - len(offer['passengers'])}/{offer['seats_available']}<br>
-                        <strong>Price:</strong> ${offer['price_per_seat']:.2f} per seat<br>
-                        <strong>Notes:</strong> {offer['notes'] or 'None'}
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with col2:
-                    if st.button(f"Join Ride", key=f"join_{offer['id']}"):
-                        if join_carpool(offer['id'], st.session_state.current_user):
-                            st.success("Successfully joined the carpool!")
-                            st.rerun()
-                        else:
-                            st.error("Unable to join - ride may be full")
-        else:
-            st.info("No rides found matching your criteria. Consider creating a ride request!")
-    
-    # Create ride request section
-    st.subheader("Or Create a Ride Request")
-    req_notes = st.text_area("Request Notes", placeholder="Looking for a ride, flexible with time...")
-    
-    if st.button("Create Ride Request"):
-        req_id = create_carpool_request(
-            st.session_state.current_user, search_start, search_end,
-            f"{search_date} flexible", max_price, req_notes
-        )
-        st.success(f"Ride request created! Request ID: {req_id}")
-
-# My Carpools (registered users only)
-elif nav_option == "My Carpools":
-    st.header("🚙 My Carpool Activities")
-    
-    tab1, tab2, tab3 = st.tabs(["My Offers", "My Bookings", "My Requests"])
-    
-    with tab1:
-        st.subheader("My Carpool Offers")
-        user_offers = [offer for offer in st.session_state.carpool_offers if offer['driver'] == st.session_state.current_user]
-        
-        if user_offers:
-            for offer in user_offers:
-                status_color = "🟢" if offer['status'] == 'active' else "🔴"
-                st.markdown(f"""
-                <div class="carpool-card">
-                    {status_color} <strong>Offer #{offer['id']}</strong><br>
-                    <strong>Route:</strong> {offer['start_location']} → {offer['end_location']}<br>
-                    <strong>Departure:</strong> {offer['departure_time']}<br>
-                    <strong>Passengers:</strong> {len(offer['passengers'])}/{offer['seats_available']}<br>
-                    <strong>Passengers:</strong> {', '.join(offer['passengers']) if offer['passengers'] else 'None yet'}
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.info("You haven't created any carpool offers yet.")
-    
-    with tab2:
-        st.subheader("My Carpool Bookings") 
-        user_bookings = [offer for offer in st.session_state.carpool_offers if st.session_state.current_user in offer['passengers']]
-        
-        if user_bookings:
-            for booking in user_bookings:
-                driver_rating = st.session_state.users.get(booking['driver'], {}).get('rating', 5.0)
-                st.markdown(f"""
-                <div class="carpool-card">
-                    <strong>Booking #{booking['id']}</strong><br>
-                    <strong>Driver:</strong> {booking['driver']} ⭐ {driver_rating:.1f}<br>
-                    <strong>Route:</strong> {booking['start_location']} → {booking['end_location']}<br>
-                    <strong>Departure:</strong> {booking['departure_time']}<br>
-                    <strong>Price:</strong> ${booking['price_per_seat']:.2f}
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.info("You haven't booked any carpool rides yet.")
-    
-    with tab3:
-        st.subheader("My Ride Requests")
-        user_requests = [req for req in st.session_state.carpool_requests if req['passenger'] == st.session_state.current_user]
-        
-        if user_requests:
-            for request in user_requests:
-                status_color = "🟡" if request['status'] == 'active' else "🔴"
-                st.markdown(f"""
-                <div class="carpool-card">
-                    {status_color} <strong>Request #{request['id']}</strong><br>
-                    <strong>Route:</strong> {request['start_location']} → {request['end_location']}<br>
-                    <strong>Departure:</strong> {request['departure_time']}<br>
-                    <strong>Max Price:</strong> ${request['max_price']:.2f}<br>
-                    <strong>Notes:</strong> {request['notes'] or 'None'}
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.info("You haven't created any ride requests yet.")
-
-# Browse Community (registered users only)
-elif nav_option == "Browse Community":
-    st.header("🌟 Community Dashboard")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.metric("Total Users", len(st.session_state.users))
-    with col2:
-        st.metric("Active Offers", len([o for o in st.session_state.carpool_offers if o['status'] == 'active']))
-    with col3:
-        st.metric("Total Requests", len(st.session_state.carpool_requests))
-    
-    st.subheader("Recent Carpool Activity")
-    
-    # Show recent offers
-    recent_offers = sorted(st.session_state.carpool_offers, key=lambda x: x['created_at'], reverse=True)[:5]
-    
-    if recent_offers:
-        for offer in recent_offers:
-            if offer['status'] == 'active' and len(offer['passengers']) < offer['seats_available']:
-                driver_rating = st.session_state.users.get(offer['driver'], {}).get('rating', 5.0)
-                st.markdown(f"""
-                <div class="carpool-card">
-                    <strong>{offer['driver']}</strong> ⭐ {driver_rating:.1f} is offering a ride<br>
-                    <strong>Route:</strong> {offer['start_location']} → {offer['end_location']}<br>
-                    <strong>When:</strong> {offer['departure_time']}<br>
-                    <strong>Seats:</strong> {offer['seats_available'] - len(offer['passengers'])} available<br>
-                    <strong>Price:</strong> ${offer['price_per_seat']:.2f}
-                </div>
-                """, unsafe_allow_html=True)
-    else:
-        st.info("No recent carpool activity to display.")
-    
-    st.subheader("Top Rated Drivers")
-    if st.session_state.users:
-        drivers_with_cars = [(username, data) for username, data in st.session_state.users.items() if data.get('car_info')]
-        sorted_drivers = sorted(drivers_with_cars, key=lambda x: x[1]['rating'], reverse=True)[:5]
-        
-        for username, data in sorted_drivers:
+    for achievement in achievements:
+        if achievement["unlocked"]:
             st.markdown(f"""
-            <div class="user-card">
-                <strong>{username}</strong> ⭐ {data['rating']:.1f}<br>
-                <strong>Car:</strong> {data['car_info']['make_model']} ({data['car_info']['year']})<br>
-                <strong>Trips:</strong> {data['trips_completed']} completed
+            <div class="reward-badge">
+                {achievement['icon']} {achievement['name']}
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"🔒 {achievement['name']} (Need 2000+ points)")
+    
+    st.markdown("### 📊 Quick Stats")
+    st.metric("Trips Completed", st.session_state.trips_completed)
+    st.metric("Trees Saved", f"{int(st.session_state.total_savings['co2'] / 22)}")
+
+# Main content area
+col1, col2 = st.columns([2, 1])
+
+with col1:
+    st.markdown("## 🗺️ Plan Your Smart Route")
+    
+    # Route input form
+    with st.form("route_form"):
+        col_from, col_to = st.columns(2)
+        with col_from:
+            start_location = st.text_input("📍 From", value="Downtown Office", placeholder="Enter starting point")
+        with col_to:
+            end_location = st.text_input("📍 To", value="Shopping Mall", placeholder="Enter destination")
+        
+        col_time, col_pref = st.columns(2)
+        with col_time:
+            departure_time = st.selectbox("🕐 Departure", 
+                ["Now", "In 15 minutes", "In 30 minutes", "In 1 hour"])
+        with col_pref:
+            route_preference = st.selectbox("🎯 Optimize for", 
+                ["Best Savings", "Fastest Time", "Shortest Distance"])
+        
+        find_routes = st.form_submit_button("🔍 Find Smart Routes", type="primary")
+    
+    if find_routes:
+        st.markdown("## 🛣️ Route Options")
+        
+        # Generate sample route data
+        routes = [
+            {
+                "name": "💚 Smart Eco Route",
+                "distance": "12.4 km",
+                "time": "18 min",
+                "fuel": "0.8L",
+                "cost": "$3.20",
+                "co2": "1.9 kg",
+                "savings": {"fuel": 0.3, "money": 1.80, "co2": 0.7, "time": 8},
+                "color": "#4CAF50",
+                "recommended": True,
+                "points": 50
+            },
+            {
+                "name": "⚡ Fast Route",
+                "distance": "13.8 km",
+                "time": "16 min",
+                "fuel": "0.9L",
+                "cost": "$3.80",
+                "co2": "2.1 kg",
+                "savings": {"fuel": 0.2, "money": 1.20, "co2": 0.5, "time": 10},
+                "color": "#2196F3",
+                "recommended": False,
+                "points": 30
+            },
+            {
+                "name": "🛣️ Standard Route",
+                "distance": "15.2 km",
+                "time": "26 min",
+                "fuel": "1.1L",
+                "cost": "$5.00",
+                "co2": "2.6 kg",
+                "savings": {"fuel": 0, "money": 0, "co2": 0, "time": 0},
+                "color": "#FF9800",
+                "recommended": False,
+                "points": 10
+            }
+        ]
+        
+        for i, route in enumerate(routes):
+            recommended_text = "🌟 RECOMMENDED" if route["recommended"] else ""
+            
+            st.markdown(f"""
+            <div class="route-card" style="border-left-color: {route['color']}">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3>{route['name']} {recommended_text}</h3>
+                    <div style="color: {route['color']}; font-weight: bold;">+{route['points']} points</div>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin: 1rem 0;">
+                    <div><strong>📏 Distance:</strong><br>{route['distance']}</div>
+                    <div><strong>⏱️ Time:</strong><br>{route['time']}</div>
+                    <div><strong>⛽ Fuel:</strong><br>{route['fuel']}</div>
+                    <div><strong>💰 Cost:</strong><br>{route['cost']}</div>
+                </div>
+                <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-top: 1rem;">
+                    <strong>💡 You'll Save:</strong> 
+                    {route['savings']['fuel']}L fuel • 
+                    ${route['savings']['money']} money • 
+                    {route['savings']['co2']}kg CO₂ • 
+                    {route['savings']['time']} minutes
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            if st.button(f"🚀 Choose {route['name']}", key=f"route_{i}"):
+                # Update user savings and points
+                st.session_state.eco_points += route['points']
+                st.session_state.total_savings['fuel'] += route['savings']['fuel']
+                st.session_state.total_savings['money'] += route['savings']['money']
+                st.session_state.total_savings['co2'] += route['savings']['co2']
+                st.session_state.total_savings['time'] += route['savings']['time']
+                st.session_state.trips_completed += 1
+                
+                st.success(f"🎉 Route selected! You earned {route['points']} eco points!")
+                st.rerun()
+
+with col2:
+    st.markdown("## 📈 Your Impact")
+    
+    # Total savings display
+    savings_data = st.session_state.total_savings
+    
+    st.markdown(f"""
+    <div class="savings-card">
+        <h3>🌟 Total Savings</h3>
+        <div style="font-size: 2rem; margin: 1rem 0;">{savings_data['fuel']:.1f}L</div>
+        <div>Fuel Saved</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Metrics
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div style="font-size: 1.5rem; color: #4CAF50; font-weight: bold;">${savings_data['money']:.0f}</div>
+            <div>Money Saved</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col_b:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div style="font-size: 1.5rem; color: #2196F3; font-weight: bold;">{savings_data['co2']:.0f}kg</div>
+            <div>CO₂ Reduced</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown(f"""
+    <div class="metric-card">
+        <div style="font-size: 1.5rem; color: #FF9800; font-weight: bold;">{savings_data['time']:.0f} min</div>
+        <div>Time Saved</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Environmental impact visualization
+    st.markdown("### 🌱 Environmental Impact")
+    
+    # Create a simple chart showing CO2 savings
+    fig = go.Figure(go.Indicator(
+        mode = "gauge+number+delta",
+        value = savings_data['co2'],
+        domain = {'x': [0, 1], 'y': [0, 1]},
+        title = {'text': "CO₂ Saved (kg)"},
+        delta = {'reference': 50},
+        gauge = {
+            'axis': {'range': [None, 200]},
+            'bar': {'color': "darkgreen"},
+            'steps': [
+                {'range': [0, 50], 'color': "lightgray"},
+                {'range': [50, 150], 'color': "lightgreen"},
+                {'range': [150, 200], 'color': "green"}
+            ],
+            'threshold': {
+                'line': {'color': "red", 'width': 4},
+                'thickness': 0.75,
+                'value': 90
+            }
+        }
+    ))
+    fig.update_layout(height=300)
+    st.plotly_chart(fig, use_container_width=True)
+
+# Weekly savings chart
+st.markdown("## 📊 Weekly Savings Trend")
+
+# Generate sample weekly data
+dates = pd.date_range(start=datetime.now() - timedelta(days=30), end=datetime.now(), freq='D')
+daily_fuel_savings = np.random.uniform(0.5, 2.5, len(dates))
+daily_money_savings = daily_fuel_savings * 4.2  # Approximate conversion
+
+df = pd.DataFrame({
+    'Date': dates,
+    'Fuel Saved (L)': daily_fuel_savings,
+    'Money Saved ($)': daily_money_savings
+})
+
+fig = px.line(df, x='Date', y=['Fuel Saved (L)', 'Money Saved ($)'], 
+              title="Daily Savings Trend",
+              color_discrete_sequence=['#4CAF50', '#2196F3'])
+fig.update_layout(height=400)
+st.plotly_chart(fig, use_container_width=True)
+
+# Rewards section
+st.markdown("## 🎁 Redeem Your Rewards")
+
+col1, col2, col3 = st.columns(3)
+
+rewards = [
+    {"name": "Free Coffee", "points": 100, "icon": "☕", "available": st.session_state.eco_points >= 100},
+    {"name": "Gas Voucher $10", "points": 500, "icon": "⛽", "available": st.session_state.eco_points >= 500},
+    {"name": "Plant a Tree", "points": 250, "icon": "🌳", "available": st.session_state.eco_points >= 250},
+    {"name": "Eco Car Wash", "points": 300, "icon": "🚗", "available": st.session_state.eco_points >= 300},
+    {"name": "Restaurant Discount", "points": 400, "icon": "🍽️", "available": st.session_state.eco_points >= 400},
+    {"name": "Movie Tickets", "points": 600, "icon": "🎬", "available": st.session_state.eco_points >= 600}
+]
+
+for i, reward in enumerate(rewards):
+    if i % 3 == 0:
+        col = col1
+    elif i % 3 == 1:
+        col = col2
+    else:
+        col = col3
+    
+    with col:
+        if reward["available"]:
+            if st.button(f"{reward['icon']} {reward['name']}\n{reward['points']} points", key=f"reward_{i}"):
+                st.session_state.eco_points -= reward['points']
+                st.success(f"🎉 Redeemed: {reward['name']}!")
+                st.balloons()
+                st.rerun()
+        else:
+            st.markdown(f"""
+            <div style="opacity: 0.5; text-align: center; padding: 1rem; border: 1px solid #ddd; border-radius: 8px;">
+                {reward['icon']}<br>
+                {reward['name']}<br>
+                <small>{reward['points']} points needed</small>
             </div>
             """, unsafe_allow_html=True)
 
 # Footer
 st.markdown("---")
-st.markdown("**MobiSync** - Smart Transportation for Everyone 🚗🌱")
-st.markdown("*Save money, reduce emissions, and meet new people through carpooling!*")
+st.markdown("""
+<div style="text-align: center; color: #666; padding: 2rem;">
+    🌍 Together we've saved over 10,000L of fuel and prevented 24 tons of CO₂ emissions!<br>
+    Keep using smart routes to earn more rewards and help save the planet! 🌱
+</div>
+""", unsafe_allow_html=True)
