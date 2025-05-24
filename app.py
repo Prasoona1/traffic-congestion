@@ -1,9 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import folium
-from streamlit_folium import folium_static
-from folium.features import DivIcon
 import random
 from datetime import datetime, timedelta
 
@@ -128,97 +125,71 @@ with st.sidebar:
             else:
                 st.error("Not enough points!")
 
-# Function to generate route coordinates between two points with some randomness
-def generate_route_coords(start_coords, end_coords, variation=0.01):
-    """Generate a list of coordinates forming a route between start and end"""
-    dist_lat = end_coords[0] - start_coords[0]
-    dist_lng = end_coords[1] - start_coords[1]
-    dist = np.sqrt(dist_lat*2 + dist_lng*2)
-    num_points = max(5, int(dist * 100))
-    
-    route = []
-    for i in range(num_points + 1):
-        t = i / num_points
-        lat = start_coords[0] + t * dist_lat + random.uniform(-variation, variation)
-        lng = start_coords[1] + t * dist_lng + random.uniform(-variation, variation)
-        route.append([lat, lng])
-    
-    route[0] = start_coords
-    route[-1] = end_coords
-    
-    return route
-
-# Function to create a map with routes and carpool pickup points
-def create_route_map(start_loc, end_loc, routes, carpool_points=None):
-    """Create a map with multiple route options and carpool pickup points"""
+# Function to create a visual route representation
+def create_route_visualization(start_loc, end_loc, routes):
+    """Create a text-based route visualization with directions"""
     # Hyderabad locations with real coordinates
     locations = {
-        "HITEC City": [17.4435, 78.3772],
-        "Rajiv Gandhi International Airport": [17.2403, 78.4294],
-        "Secunderabad": [17.4399, 78.4983],
-        "Banjara Hills": [17.4126, 78.4482],
-        "Jubilee Hills": [17.4239, 78.4738],
-        "Gachibowli": [17.4399, 78.3482],
-        "Kukatpally": [17.4850, 78.4867],
-        "Begumpet": [17.4504, 78.4677],
-        "Charminar": [17.3616, 78.4747],
-        "Tank Bund": [17.4126, 78.4747],
-        "Kondapur": [17.4617, 78.3617],
-        "Madhapur": [17.4483, 78.3915],
-        "Ameerpet": [17.4375, 78.4482],
-        "Miyapur": [17.5067, 78.3592],
-        "LB Nagar": [17.3498, 78.5522]
+        "HITEC City": {"coords": [17.4435, 78.3772], "area": "Financial District"},
+        "Rajiv Gandhi International Airport": {"coords": [17.2403, 78.4294], "area": "Shamshabad"},
+        "Secunderabad": {"coords": [17.4399, 78.4983], "area": "Twin City"},
+        "Banjara Hills": {"coords": [17.4126, 78.4482], "area": "Central Hyderabad"},
+        "Jubilee Hills": {"coords": [17.4239, 78.4738], "area": "Upscale Residential"},
+        "Gachibowli": {"coords": [17.4399, 78.3482], "area": "IT Hub"},
+        "Kukatpally": {"coords": [17.4850, 78.4867], "area": "Residential Hub"},
+        "Begumpet": {"coords": [17.4504, 78.4677], "area": "Central District"},
+        "Charminar": {"coords": [17.3616, 78.4747], "area": "Old City"},
+        "Tank Bund": {"coords": [17.4126, 78.4747], "area": "Lakeside"},
+        "Kondapur": {"coords": [17.4617, 78.3617], "area": "Tech Corridor"},
+        "Madhapur": {"coords": [17.4483, 78.3915], "area": "HITEC City Adjacent"},
+        "Ameerpet": {"coords": [17.4375, 78.4482], "area": "Commercial Center"},
+        "Miyapur": {"coords": [17.5067, 78.3592], "area": "Metro Terminus"},
+        "LB Nagar": {"coords": [17.3498, 78.5522], "area": "IT Corridor"}
     }
     
-    start_coords = locations.get(start_loc, locations["HITEC City"])
-    end_coords = locations.get(end_loc, locations["Rajiv Gandhi International Airport"])
+    start_info = locations.get(start_loc, locations["HITEC City"])
+    end_info = locations.get(end_loc, locations["Rajiv Gandhi International Airport"])
     
-    center_lat = (start_coords[0] + end_coords[0]) / 2
-    center_lng = (start_coords[1] + end_coords[1]) / 2
-    route_map = folium.Map(location=[center_lat, center_lng], zoom_start=12, tiles="CartoDB positron")
+    # Calculate rough distance
+    lat_diff = abs(start_info["coords"][0] - end_info["coords"][0])
+    lng_diff = abs(start_info["coords"][1] - end_info["coords"][1])
+    distance = ((lat_diff ** 2 + lng_diff ** 2) ** 0.5) * 111  # Rough km conversion
     
-    # Add markers for start and end points
-    folium.Marker(
-        location=start_coords,
-        popup=start_loc,
-        icon=folium.Icon(color="green", icon="play", prefix="fa"),
-        tooltip=f"Start: {start_loc}"
-    ).add_to(route_map)
+    return {
+        "start": start_info,
+        "end": end_info,
+        "distance": distance,
+        "routes": routes
+    }
+
+# Function to get route directions
+def get_route_directions(start_loc, end_loc, route_type):
+    """Generate route directions based on start, end, and route type"""
+    directions = {
+        "Fastest Route (via ORR)": [
+            f"🚗 Start from {start_loc}",
+            "➡ Head to nearest ORR access point",
+            "🛣 Take Outer Ring Road",
+            "➡ Exit at appropriate junction",
+            f"🏁 Arrive at {end_loc}"
+        ],
+        "Eco-Friendly Route": [
+            f"🚗 Start from {start_loc}",
+            "➡ Take city roads avoiding major highways",
+            "🌱 Route through less congested areas",
+            "➡ Use tree-lined roads where possible",
+            f"🏁 Arrive at {end_loc}"
+        ],
+        "City Route (via Mehdipatnam)": [
+            f"🚗 Start from {start_loc}",
+            "➡ Head towards Mehdipatnam",
+            "🏙 Travel through city center",
+            "➡ Navigate local roads",
+            f"🏁 Arrive at {end_loc}"
+        ]
+    }
     
-    folium.Marker(
-        location=end_coords,
-        popup=end_loc,
-        icon=folium.Icon(color="red", icon="stop", prefix="fa"),
-        tooltip=f"End: {end_loc}"
-    ).add_to(route_map)
-    
-    # Add carpool pickup points if provided
-    if carpool_points:
-        for point in carpool_points:
-            folium.Marker(
-                location=point['coords'],
-                popup=f"Carpool Pickup: {point['name']}<br>Passengers: {point['passengers']}",
-                icon=folium.Icon(color="blue", icon="users", prefix="fa"),
-                tooltip=f"Carpool: {point['name']}"
-            ).add_to(route_map)
-    
-    # Add routes
-    colors = ["blue", "purple", "orange"]
-    
-    for i, route in enumerate(routes):
-        variation = 0.005 * (i + 1)
-        route_coords = generate_route_coords(start_coords, end_coords, variation)
-        
-        # Add route line
-        folium.PolyLine(
-            route_coords,
-            color=colors[i % len(colors)],
-            weight=4,
-            opacity=0.8,
-            tooltip=f"{route['name']} - {route['time_min']:.1f} min"
-        ).add_to(route_map)
-    
-    return route_map
+    return directions.get(route_type, directions["Fastest Route (via ORR)"])
 
 # Function to generate carpool options
 def generate_carpool_options():
@@ -387,9 +358,41 @@ with tab1:
                 """, unsafe_allow_html=True)
         
         with col2:
-            st.subheader("Route Map - Hyderabad")
-            route_map = create_route_map(start_location, end_location, routes)
-            folium_static(route_map, width=700, height=500)
+            st.subheader("Route Information - Hyderabad")
+            
+            # Create route visualization
+            route_viz = create_route_visualization(start_location, end_location, routes)
+            
+            # Display route summary
+            st.markdown(f"""
+            *📍 Journey Overview:*
+            - *From:* {start_location} ({route_viz['start']['area']})
+            - *To:* {end_location} ({route_viz['end']['area']})
+            - *Estimated Distance:* {route_viz['distance']:.1f} km
+            """)
+            
+            # Display directions for the recommended route
+            st.subheader("🗺 Turn-by-Turn Directions")
+            selected_route = routes[0]  # Default to first route
+            directions = get_route_directions(start_location, end_location, selected_route['name'])
+            
+            for i, direction in enumerate(directions, 1):
+                st.write(f"{i}.** {direction}")
+            
+            # Traffic and route insights
+            st.subheader("🚦 Traffic Insights")
+            current_hour = datetime.now().hour
+            if 8 <= current_hour <= 10 or 18 <= current_hour <= 20:
+                st.warning("⚠ Peak traffic hours! Consider alternative routes or departure times.")
+            elif 22 <= current_hour or current_hour <= 6:
+                st.success("🌙 Low traffic hours - faster travel expected!")
+            else:
+                st.info("📊 Moderate traffic expected.")
+            
+            # Location coordinates for reference
+            with st.expander("📍 Location Details"):
+                st.write(f"{start_location}:** {route_viz['start']['coords'][0]:.4f}, {route_viz['start']['coords'][1]:.4f}")
+                st.write(f"{end_location}:** {route_viz['end']['coords'][0]:.4f}, {route_viz['end']['coords'][1]:.4f}")
 
 with tab2:
     st.header("🚗 Carpooling Hub - Hyderabad")
