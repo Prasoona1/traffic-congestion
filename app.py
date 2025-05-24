@@ -1,14 +1,15 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import folium
+from streamlit_folium import folium_static
+from folium.features import DivIcon
 import random
 from datetime import datetime, timedelta
-import requests
-import json
 
 # Set page configuration
 st.set_page_config(
-    page_title="MobiSync India - Hyderabad Route Optimization",
+    page_title="MobiSync Route Optimization",
     page_icon="🚦",
     layout="wide"
 )
@@ -23,37 +24,33 @@ if 'co2_saved' not in st.session_state:
 if 'carpools_joined' not in st.session_state:
     st.session_state.carpools_joined = 12
 
-# Google Maps API Configuration
-# Note: In production, store this in environment variables or Streamlit secrets
-GOOGLE_MAPS_API_KEY = st.secrets.get("GOOGLE_MAPS_API_KEY", "AIzaSyCnm7N-Gsp0XPA3CIC8n9uByuFs-HG9v8U")
-
-# Custom CSS (keeping the original styling)
+# Custom CSS
 st.markdown("""
 <style>
 .title {
     font-size: 2rem;
     font-weight: bold;
-    color: #FF6B35;
+    color: #1E88E5;
     text-align: center;
 }
 .route-card {
     padding: 1rem;
     border-radius: 0.5rem;
     margin-bottom: 1rem;
-    border-left: 4px solid #FF6B35;
+    border-left: 4px solid #1E88E5;
 }
 .carpool-card {
     padding: 1rem;
     border-radius: 0.5rem;
     margin-bottom: 1rem;
     border: 2px solid #4CAF50;
-    background-color: #E8F5E8;
+    background-color: yellow;
 }
 .sustainability-card {
     padding: 1rem;
     border-radius: 0.5rem;
     margin-bottom: 1rem;
-    background-color: #138808;
+    background-color: brown;
     color: white;
 }
 .reward-badge {
@@ -69,152 +66,20 @@ st.markdown("""
     display: flex;
     justify-content: space-around;
     padding: 1rem;
-    background-color: #138808;
+    background-color: brown;
     border-radius: 0.5rem;
     margin: 1rem 0;
-    color: white;
 }
 .metric-item {
     text-align: center;
 }
-.map-container {
-    border-radius: 0.5rem;
-    overflow: hidden;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
 </style>
 """, unsafe_allow_html=True)
 
-# Google Maps Integration Functions
-def get_google_maps_directions(origin, destination, api_key, mode='driving', alternatives=True):
-    """
-    Get directions from Google Maps Directions API
-    """
-    base_url = "https://maps.googleapis.com/maps/api/directions/json"
-    
-    params = {
-        'origin': origin,
-        'destination': destination,
-        'key': api_key,
-        'mode': mode,
-        'alternatives': alternatives,
-        'traffic_model': 'best_guess',
-        'departure_time': 'now'
-    }
-    
-    try:
-        response = requests.get(base_url, params=params)
-        return response.json()
-    except Exception as e:
-        st.error(f"Error fetching directions: {e}")
-        return None
-
-def get_google_maps_distance_matrix(origins, destinations, api_key, mode='driving'):
-    """
-    Get distance matrix from Google Maps Distance Matrix API
-    """
-    base_url = "https://maps.googleapis.com/maps/api/distancematrix/json"
-    
-    params = {
-        'origins': '|'.join(origins),
-        'destinations': '|'.join(destinations),
-        'key': api_key,
-        'mode': mode,
-        'traffic_model': 'best_guess',
-        'departure_time': 'now'
-    }
-    
-    try:
-        response = requests.get(base_url, params=params)
-        return response.json()
-    except Exception as e:
-        st.error(f"Error fetching distance matrix: {e}")
-        return None
-
-def create_google_maps_embed(origin, destination, api_key, mode='driving'):
-    """
-    Create Google Maps embed URL for displaying route
-    """
-    base_url = "https://www.google.com/maps/embed/v1/directions"
-    
-    params = {
-        'key': api_key,
-        'origin': origin,
-        'destination': destination,
-        'mode': mode,
-        'avoid': 'tolls' if st.session_state.get('avoid_tolls', False) else '',
-    }
-    
-    # Remove empty parameters
-    params = {k: v for k, v in params.items() if v}
-    
-    # Build URL
-    param_string = '&'.join([f"{k}={v}" for k, v in params.items()])
-    return f"{base_url}?{param_string}"
-
-def parse_google_directions(directions_data):
-    """
-    Parse Google Directions API response into readable format
-    """
-    if not directions_data or directions_data['status'] != 'OK':
-        return []
-    
-    routes = []
-    for route in directions_data['routes']:
-        leg = route['legs'][0]  # Assuming single leg journey
-        
-        route_info = {
-            'distance_km': leg['distance']['value'] / 1000,
-            'duration_min': leg['duration']['value'] / 60,
-            'duration_in_traffic_min': leg.get('duration_in_traffic', {}).get('value', 0) / 60,
-            'start_address': leg['start_address'],
-            'end_address': leg['end_address'],
-            'summary': route['summary'],
-            'steps': []
-        }
-        
-        # Parse steps
-        for step in leg['steps']:
-            step_info = {
-                'instruction': step['html_instructions'],
-                'distance': step['distance']['text'],
-                'duration': step['duration']['text'],
-                'maneuver': step.get('maneuver', '')
-            }
-            route_info['steps'].append(step_info)
-        
-        routes.append(route_info)
-    
-    return routes
-
-# Enhanced location data with more precise coordinates
-HYDERABAD_LOCATIONS = {
-    "HITEC City": {"coords": [17.4435, 78.3772], "address": "HITEC City, Cyberabad, Telangana, India"},
-    "Rajiv Gandhi International Airport": {"coords": [17.2403, 78.4294], "address": "Rajiv Gandhi International Airport, Shamshabad, Telangana, India"},
-    "Secunderabad": {"coords": [17.4399, 78.4983], "address": "Secunderabad, Telangana, India"},
-    "Banjara Hills": {"coords": [17.4126, 78.4482], "address": "Banjara Hills, Hyderabad, Telangana, India"},
-    "Jubilee Hills": {"coords": [17.4239, 78.4738], "address": "Jubilee Hills, Hyderabad, Telangana, India"},
-    "Gachibowli": {"coords": [17.4399, 78.3482], "address": "Gachibowli, Hyderabad, Telangana, India"},
-    "Kukatpally": {"coords": [17.4850, 78.4867], "address": "Kukatpally, Hyderabad, Telangana, India"},
-    "Begumpet": {"coords": [17.4504, 78.4677], "address": "Begumpet, Hyderabad, Telangana, India"},
-    "Charminar": {"coords": [17.3616, 78.4747], "address": "Charminar, Hyderabad, Telangana, India"},
-    "Tank Bund": {"coords": [17.4126, 78.4747], "address": "Tank Bund, Hyderabad, Telangana, India"},
-    "Kondapur": {"coords": [17.4617, 78.3617], "address": "Kondapur, Hyderabad, Telangana, India"},
-    "Madhapur": {"coords": [17.4483, 78.3915], "address": "Madhapur, Hyderabad, Telangana, India"},
-    "Ameerpet": {"coords": [17.4375, 78.4482], "address": "Ameerpet, Hyderabad, Telangana, India"},
-    "Miyapur": {"coords": [17.5067, 78.3592], "address": "Miyapur, Hyderabad, Telangana, India"},
-    "LB Nagar": {"coords": [17.3498, 78.5522], "address": "LB Nagar, Hyderabad, Telangana, India"}
-}
-
 # Title
-st.markdown('<p class="title">🚦 MobiSync India - Hyderabad Route Optimization</p>', unsafe_allow_html=True)
+st.markdown('<p class="title">🚦 MobiSync Route Optimization</p>', unsafe_allow_html=True)
 
-# API Key Configuration
-if GOOGLE_MAPS_API_KEY == "AIzaSyCnm7N-Gsp0XPA3CIC8n9uByuFs-HG9v8U":
-    st.warning("⚠ Google Maps API key not configured. Please add your API key to Streamlit secrets.")
-    st.info("To use Google Maps integration, add your API key in Streamlit Cloud secrets or .streamlit/secrets.toml")
-
-# Sidebar (keeping original sidebar code)
+# Sidebar for user profile and rewards
 with st.sidebar:
     st.header("🌟 Your EcoProfile")
     
@@ -243,20 +108,13 @@ with st.sidebar:
     for badge in badges:
         st.markdown(f'<span class="reward-badge">{badge}</span>', unsafe_allow_html=True)
     
-    # Google Maps Settings
-    st.subheader("🗺 Map Settings")
-    map_view = st.selectbox("Map View", ["roadmap", "satellite", "hybrid", "terrain"])
-    show_traffic = st.checkbox("Show Traffic Layer", True)
-    
-    # Rewards store (keeping original)
+    # Rewards store
     st.subheader("🎁 Rewards Store")
     rewards = [
-        {"name": "Free Chai", "points": 100, "icon": "☕"},
-        {"name": "Petrol Voucher ₹300", "points": 250, "icon": "⛽"},
+        {"name": "Free Coffee", "points": 100, "icon": "☕"},
+        {"name": "Gas Voucher $5", "points": 250, "icon": "⛽"},
         {"name": "Premium Features", "points": 500, "icon": "⭐"},
-        {"name": "Plant a Tree", "points": 200, "icon": "🌳"},
-        {"name": "Metro Card Top-up ₹200", "points": 180, "icon": "🚇"},
-        {"name": "Swiggy Voucher ₹150", "points": 150, "icon": "🍽"}
+        {"name": "Plant a Tree", "points": 200, "icon": "🌳"}
     ]
     
     for reward in rewards:
@@ -267,17 +125,124 @@ with st.sidebar:
             else:
                 st.error("Not enough points!")
 
-# Helper functions (keeping existing ones and adding new)
+# Function to generate route coordinates between two points with some randomness
+def generate_route_coords(start_coords, end_coords, variation=0.01):
+    """Generate a list of coordinates forming a route between start and end"""
+    dist_lat = end_coords[0] - start_coords[0]
+    dist_lng = end_coords[1] - start_coords[1]
+    dist = np.sqrt(dist_lat*2 + dist_lng*2)
+    num_points = max(5, int(dist * 100))
+    
+    route = []
+    for i in range(num_points + 1):
+        t = i / num_points
+        lat = start_coords[0] + t * dist_lat + random.uniform(-variation, variation)
+        lng = start_coords[1] + t * dist_lng + random.uniform(-variation, variation)
+        route.append([lat, lng])
+    
+    route[0] = start_coords
+    route[-1] = end_coords
+    
+    return route
+
+# Function to create a map with routes and carpool pickup points
+def create_route_map(start_loc, end_loc, routes, carpool_points=None):
+    """Create a map with multiple route options and carpool pickup points"""
+    locations = {
+        "City Center": [40.712, -74.006],
+        "Airport": [40.640, -73.779],
+        "Downtown": [40.702, -74.015],
+        "Midtown": [40.754, -73.984],
+        "Brooklyn": [40.678, -73.944],
+        "Queens": [40.728, -73.794],
+        "Bronx": [40.837, -73.846],
+        "Central Park": [40.785, -73.968],
+        "Times Square": [40.758, -73.985],
+        "Financial District": [40.707, -74.011]
+    }
+    
+    start_coords = locations.get(start_loc, locations["City Center"])
+    end_coords = locations.get(end_loc, locations["Airport"])
+    
+    center_lat = (start_coords[0] + end_coords[0]) / 2
+    center_lng = (start_coords[1] + end_coords[1]) / 2
+    route_map = folium.Map(location=[center_lat, center_lng], zoom_start=12, tiles="CartoDB positron")
+    
+    # Add markers for start and end points
+    folium.Marker(
+        location=start_coords,
+        popup=start_loc,
+        icon=folium.Icon(color="green", icon="play", prefix="fa"),
+        tooltip=f"Start: {start_loc}"
+    ).add_to(route_map)
+    
+    folium.Marker(
+        location=end_coords,
+        popup=end_loc,
+        icon=folium.Icon(color="red", icon="stop", prefix="fa"),
+        tooltip=f"End: {end_loc}"
+    ).add_to(route_map)
+    
+    # Add carpool pickup points if provided
+    if carpool_points:
+        for point in carpool_points:
+            folium.Marker(
+                location=point['coords'],
+                popup=f"Carpool Pickup: {point['name']}<br>Passengers: {point['passengers']}",
+                icon=folium.Icon(color="blue", icon="users", prefix="fa"),
+                tooltip=f"Carpool: {point['name']}"
+            ).add_to(route_map)
+    
+    # Add routes
+    colors = ["blue", "purple", "orange"]
+    
+    for i, route in enumerate(routes):
+        variation = 0.005 * (i + 1)
+        route_coords = generate_route_coords(start_coords, end_coords, variation)
+        
+        # Add route line
+        folium.PolyLine(
+            route_coords,
+            color=colors[i % len(colors)],
+            weight=4,
+            opacity=0.8,
+            tooltip=f"{route['name']} - {route['time_min']:.1f} min"
+        ).add_to(route_map)
+    
+    return route_map
+
+# Function to generate carpool options
+def generate_carpool_options():
+    """Generate sample carpool options"""
+    names = ["Sarah M.", "Mike R.", "Jessica L.", "David K.", "Amanda S."]
+    cars = ["Toyota Camry", "Honda Accord", "Tesla Model 3", "BMW 3 Series", "Nissan Altima"]
+    
+    carpool_options = []
+    for i in range(3):
+        option = {
+            "driver": random.choice(names),
+            "car": random.choice(cars),
+            "rating": round(random.uniform(4.5, 5.0), 1),
+            "departure_time": f"{random.randint(7, 9)}:{random.choice(['00', '15', '30', '45'])} AM",
+            "available_seats": random.randint(1, 3),
+            "cost_per_person": round(random.uniform(5, 15), 2),
+            "eco_points": random.randint(15, 30),
+            "route_match": random.randint(85, 98)
+        }
+        carpool_options.append(option)
+    
+    return carpool_options
+
+# Function to calculate environmental impact
 def calculate_environmental_impact(distance_km, transport_mode, passengers=1):
     """Calculate CO2 emissions and savings"""
+    # CO2 emissions per km (kg)
     emissions_per_km = {
         "solo_driving": 0.21,
-        "carpool_2": 0.105,
-        "carpool_3": 0.07,
-        "carpool_4": 0.0525,
+        "carpool_2": 0.105,  # Split between 2 people
+        "carpool_3": 0.07,   # Split between 3 people
+        "carpool_4": 0.0525, # Split between 4 people
         "public_transport": 0.05,
-        "metro": 0.03,
-        "auto_rickshaw": 0.15,
         "bike": 0,
         "walk": 0
     }
@@ -290,21 +255,21 @@ def calculate_environmental_impact(distance_km, transport_mode, passengers=1):
         "solo_emissions": solo_emissions,
         "mode_emissions": mode_emissions,
         "co2_saved": max(0, co2_saved),
-        "trees_equivalent": max(0, co2_saved / 22)
+        "trees_equivalent": max(0, co2_saved / 22)  # 1 tree absorbs ~22kg CO2/year
     }
 
 # Main App Tabs
-tab1, tab2, tab3, tab4 = st.tabs(["🗺 Route Planning", "🚗 Carpooling", "🌱 Sustainability Tracker", "📍 Live Maps"])
+tab1, tab2, tab3 = st.tabs(["🗺 Route Planning", "🚗 Carpooling", "🌱 Sustainability Tracker"])
 
 with tab1:
-    st.header("Smart Route Optimization - Hyderabad")
+    st.header("Smart Route Optimization")
     
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("Starting Point")
         start_location = st.selectbox(
             "Select start location", 
-            list(HYDERABAD_LOCATIONS.keys()),
+            ["City Center", "Downtown", "Midtown", "Brooklyn", "Queens", "Central Park"],
             index=0
         )
 
@@ -312,8 +277,8 @@ with tab1:
         st.markdown("Destination")
         end_location = st.selectbox(
             "Select destination", 
-            list(HYDERABAD_LOCATIONS.keys()),
-            index=1
+            ["Airport", "Financial District", "Times Square", "Bronx", "Brooklyn", "Queens"],
+            index=0
         )
 
     # Route preferences
@@ -321,8 +286,7 @@ with tab1:
     col1, col2 = st.columns(2)
     with col1:
         avoid_tolls = st.checkbox("Avoid toll roads", False)
-        st.session_state.avoid_tolls = avoid_tolls
-        avoid_highways = st.checkbox("Avoid ORR (Outer Ring Road)", False)
+        avoid_highways = st.checkbox("Avoid highways", False)
         eco_mode = st.checkbox("🌱 Eco-friendly priority", False)
 
     with col2:
@@ -338,214 +302,82 @@ with tab1:
             index=0
         )
 
-    if st.button("Find Routes with Google Maps", type="primary"):
-        if GOOGLE_MAPS_API_KEY != "YOUR_API_KEY_HERE":
-            origin_address = HYDERABAD_LOCATIONS[start_location]["address"]
-            destination_address = HYDERABAD_LOCATIONS[end_location]["address"]
-            
-            # Get real-time directions from Google Maps
-            with st.spinner("Fetching real-time route data from Google Maps..."):
-                directions_data = get_google_maps_directions(
-                    origin_address, 
-                    destination_address, 
-                    GOOGLE_MAPS_API_KEY
-                )
-                
-                if directions_data and directions_data['status'] == 'OK':
-                    routes = parse_google_directions(directions_data)
-                    
-                    col1, col2 = st.columns([1, 2])
-                    
-                    with col1:
-                        st.subheader("🗺 Google Maps Routes")
-                        
-                        for i, route in enumerate(routes):
-                            # Calculate environmental impact
-                            impact = calculate_environmental_impact(route['distance_km'], "solo_driving")
-                            
-                            # Determine traffic delay
-                            traffic_delay = route['duration_in_traffic_min'] - route['duration_min'] if route['duration_in_traffic_min'] > 0 else 0
-                            
-                            card_color = "#FF6B35" if i == 0 else "#2196F3"
-                            recommended_text = "⚡ RECOMMENDED" if i == 0 else f"🛣 ROUTE {i+1}"
-                            
-                            st.markdown(f"""
-                            <div class="route-card" style="background-color: {card_color}; color: white;">
-                                <h4>{route['summary']} {recommended_text}</h4>
-                                <p>
-                                <strong>Distance:</strong> {route['distance_km']:.1f} km<br>
-                                <strong>Duration:</strong> {route['duration_min']:.0f} minutes<br>
-                                <strong>With Traffic:</strong> {route['duration_in_traffic_min']:.0f} minutes<br>
-                                <strong>Traffic Delay:</strong> +{traffic_delay:.0f} minutes<br>
-                                <strong>CO₂ Emissions:</strong> {impact['solo_emissions']:.2f} kg<br>
-                                <strong>Fuel Cost:</strong> ₹{route['distance_km'] * 8:.0f}
-                                </p>
-                            </div>
-                            """, unsafe_allow_html=True)
-                    
-                    with col2:
-                        st.subheader("🗺 Interactive Route Map")
-                        
-                        # Create Google Maps embed
-                        maps_embed_url = create_google_maps_embed(
-                            origin_address, 
-                            destination_address, 
-                            GOOGLE_MAPS_API_KEY
-                        )
-                        
-                        # Display embedded map
-                        st.markdown(f"""
-                        <div class="map-container">
-                            <iframe
-                                width="100%"
-                                height="400"
-                                style="border:0"
-                                loading="lazy"
-                                allowfullscreen
-                                referrerpolicy="no-referrer-when-downgrade"
-                                src="{maps_embed_url}">
-                            </iframe>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # Display turn-by-turn directions
-                        st.subheader("🧭 Turn-by-Turn Directions")
-                        
-                        if routes:
-                            selected_route = routes[0]  # Use first (recommended) route
-                            
-                            for i, step in enumerate(selected_route['steps'][:10]):  # Show first 10 steps
-                                # Clean HTML tags from instructions
-                                instruction = step['instruction'].replace('<b>', '').replace('</b>', '')
-                                instruction = instruction.replace('<div style="font-size:0.9em">', ' (').replace('</div>', ')')
-                                
-                                st.write(f"{i+1}.** {instruction}")
-                                st.write(f"   📏 {step['distance']} • ⏱ {step['duration']}")
-                
-                else:
-                    st.error("Unable to fetch route data from Google Maps. Please check your API key and try again.")
+    if st.button("Find Routes", type="primary"):
+        base_distance = 15 + random.uniform(-3, 3)
+        base_time = 25 + random.uniform(-5, 5)
         
-        else:
-            # Fallback to original route generation when API key is not available
-            st.info("Using sample route data. Configure Google Maps API key for real-time data.")
-            # ... (keep original route generation code as fallback)
-
-with tab4:
-    st.header("📍 Live Maps & Traffic")
-    
-    if GOOGLE_MAPS_API_KEY != "YOUR_API_KEY_HERE":
-        st.subheader("🗺 Hyderabad Traffic Overview")
-        
-        # Traffic overview map centered on Hyderabad
-        traffic_map_url = f"""
-        https://www.google.com/maps/embed/v1/view?key={GOOGLE_MAPS_API_KEY}&center=17.3850,78.4867&zoom=11&maptype={map_view}
-        """
-        
-        st.markdown(f"""
-        <div class="map-container">
-            <iframe
-                width="100%"
-                height="500"
-                style="border:0"
-                loading="lazy"
-                allowfullscreen
-                referrerpolicy="no-referrer-when-downgrade"
-                src="{traffic_map_url}">
-            </iframe>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Live traffic data for major routes
-        st.subheader("🚦 Live Traffic Status")
-        
-        major_routes = [
-            ("HITEC City", "Gachibowli"),
-            ("Secunderabad", "HITEC City"),
-            ("Banjara Hills", "Rajiv Gandhi International Airport"),
-            ("Kukatpally", "Ameerpet")
+        routes = [
+            {
+                'name': 'Fastest Route',
+                'distance_km': base_distance + random.uniform(0, 2),
+                'time_min': base_time * (1.2 if avoid_highways else 1.0),
+                'congestion': random.uniform(0.6, 0.8),
+                'tolls': not avoid_tolls,
+                'highways': not avoid_highways,
+                'eco_rating': random.randint(6, 8)
+            },
+            {
+                'name': 'Eco-Friendly Route',
+                'distance_km': base_distance * 0.95,
+                'time_min': base_time * 1.15,
+                'congestion': random.uniform(0.4, 0.6),
+                'tolls': False,
+                'highways': False,
+                'eco_rating': random.randint(8, 10)
+            },
+            {
+                'name': 'Balanced Route',
+                'distance_km': base_distance * 1.05,
+                'time_min': base_time * 1.1,
+                'congestion': random.uniform(0.5, 0.7),
+                'tolls': random.choice([True, False]),
+                'highways': random.choice([True, False]),
+                'eco_rating': random.randint(7, 9)
+            }
         ]
         
-        if st.button("Refresh Traffic Data"):
-            traffic_data = []
-            
-            for origin, destination in major_routes:
-                origin_addr = HYDERABAD_LOCATIONS[origin]["address"]
-                dest_addr = HYDERABAD_LOCATIONS[destination]["address"]
-                
-                # Get distance matrix data
-                matrix_data = get_google_maps_distance_matrix(
-                    [origin_addr], [dest_addr], GOOGLE_MAPS_API_KEY
-                )
-                
-                if matrix_data and matrix_data['status'] == 'OK':
-                    element = matrix_data['rows'][0]['elements'][0]
-                    if element['status'] == 'OK':
-                        duration = element['duration']['value'] / 60
-                        duration_in_traffic = element.get('duration_in_traffic', {}).get('value', 0) / 60
-                        distance = element['distance']['value'] / 1000
-                        
-                        traffic_delay = duration_in_traffic - duration if duration_in_traffic > 0 else 0
-                        
-                        # Determine traffic status
-                        if traffic_delay < 5:
-                            status = "🟢 Light"
-                            status_color = "#4CAF50"
-                        elif traffic_delay < 15:
-                            status = "🟡 Moderate"
-                            status_color = "#FF9800"
-                        else:
-                            status = "🔴 Heavy"
-                            status_color = "#F44336"
-                        
-                        traffic_data.append({
-                            'Route': f"{origin} → {destination}",
-                            'Distance': f"{distance:.1f} km",
-                            'Normal Time': f"{duration:.0f} min",
-                            'Current Time': f"{duration_in_traffic:.0f} min",
-                            'Delay': f"+{traffic_delay:.0f} min",
-                            'Status': status
-                        })
-            
-            if traffic_data:
-                df = pd.DataFrame(traffic_data)
-                st.dataframe(df, use_container_width=True)
+        col1, col2 = st.columns([1, 2])
         
-        # Place search functionality
-        st.subheader("🔍 Search Places in Hyderabad")
-        
-        col1, col2 = st.columns([3, 1])
         with col1:
-            search_query = st.text_input("Search for a place", placeholder="e.g., Inorbit Mall, Charminar, etc.")
+            st.subheader("Route Options")
+            
+            for i, route in enumerate(routes):
+                # Calculate environmental impact
+                impact = calculate_environmental_impact(route['distance_km'], "solo_driving")
+                
+                if i == 0:
+                    card_color = "#38b6ff"
+                    text_color = "white"
+                    recommended_text = "✅ RECOMMENDED"
+                elif route['name'] == 'Eco-Friendly Route':
+                    card_color = "#4CAF50"
+                    text_color = "white"
+                    recommended_text = "🌱 ECO CHOICE"
+                else:
+                    card_color = "#ff5757"
+                    text_color = "white"
+                    recommended_text = ""
+                
+                st.markdown(f"""
+                <div class="route-card" style="background-color: {card_color}; color: {text_color};">
+                    <h4>{route['name']} {recommended_text}</h4>
+                    <p>
+                    <strong>Distance:</strong> {route['distance_km']:.1f} km<br>
+                    <strong>Est. Time:</strong> {route['time_min']:.1f} minutes<br>
+                    <strong>Eco Rating:</strong> {route['eco_rating']}/10 🌱<br>
+                    <strong>CO₂ Emissions:</strong> {impact['solo_emissions']:.2f} kg<br>
+                    <strong>Features:</strong> {"Uses toll roads" if route['tolls'] else "No tolls"}
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
         
         with col2:
-            if st.button("Search"):
-                if search_query:
-                    # Create search map embed
-                    search_map_url = f"""
-                    https://www.google.com/maps/embed/v1/place?key={GOOGLE_MAPS_API_KEY}&q={search_query},Hyderabad,Telangana&zoom=15
-                    """
-                    
-                    st.markdown(f"""
-                    <div class="map-container">
-                        <iframe
-                            width="100%"
-                            height="300"
-                            style="border:0"
-                            loading="lazy"
-                            allowfullscreen
-                            referrerpolicy="no-referrer-when-downgrade"
-                            src="{search_map_url}">
-                        </iframe>
-                    </div>
-                    """, unsafe_allow_html=True)
-    
-    else:
-        st.warning("Google Maps API key required for live traffic data and interactive maps.")
-        st.info("Please configure your API key to access this feature.")
+            st.subheader("Route Map")
+            route_map = create_route_map(start_location, end_location, routes)
+            folium_static(route_map, width=700, height=500)
 
-# Keep the rest of the tabs (tab2 and tab3) exactly as they were in the original code
 with tab2:
-    st.header("🚗 Carpooling Hub - Hyderabad")
+    st.header("🚗 Carpooling Hub")
     
     st.markdown("""
     <div class="eco-metrics">
@@ -554,7 +386,7 @@ with tab2:
             <p>Carpools Joined</p>
         </div>
         <div class="metric-item">
-            <h3>💰 ₹2,400</h3>
+            <h3>💰 $180</h3>
             <p>Money Saved</p>
         </div>
         <div class="metric-item">
@@ -571,31 +403,15 @@ with tab2:
     # Carpool search
     col1, col2 = st.columns(2)
     with col1:
-        carpool_start = st.selectbox("From", list(HYDERABAD_LOCATIONS.keys())[:4], key="carpool_from")
+        carpool_start = st.selectbox("From", ["City Center", "Downtown", "Midtown", "Brooklyn"], key="carpool_from")
         carpool_date = st.date_input("Travel Date", datetime.now())
     
     with col2:
-        carpool_end = st.selectbox("To", list(HYDERABAD_LOCATIONS.keys())[1:5], key="carpool_to")
+        carpool_end = st.selectbox("To", ["Airport", "Financial District", "Times Square", "Queens"], key="carpool_to")
         carpool_time = st.time_input("Departure Time", datetime.now().time())
     
     if st.button("Find Carpool Matches", type="primary"):
-        # Generate sample carpool options
-        names = ["Priya S.", "Rajesh K.", "Anita M.", "Vikram R.", "Sneha P.", "Arjun T.", "Kavya L."]
-        cars = ["Maruti Swift", "Hyundai i20", "Honda City", "Toyota Innova", "Tata Nexon", "Mahindra XUV300", "Kia Seltos"]
-        
-        carpool_options = []
-        for i in range(3):
-            option = {
-                "driver": random.choice(names),
-                "car": random.choice(cars),
-                "rating": round(random.uniform(4.5, 5.0), 1),
-                "departure_time": f"{random.randint(7, 9)}:{random.choice(['00', '15', '30', '45'])} AM",
-                "available_seats": random.randint(1, 3),
-                "cost_per_person": round(random.uniform(50, 200), 0),
-                "eco_points": random.randint(15, 30),
-                "route_match": random.randint(85, 98)
-            }
-            carpool_options.append(option)
+        carpool_options = generate_carpool_options()
         
         st.subheader("Available Carpool Options")
         
@@ -610,7 +426,7 @@ with tab2:
                     ⭐ Rating: {option['rating']}/5.0 | 
                     🕐 Departure: {option['departure_time']} | 
                     👥 {option['available_seats']} seats available<br>
-                    💰 ₹{option['cost_per_person']:.0f}/person | 
+                    💰 ${option['cost_per_person']}/person | 
                     🌱 +{option['eco_points']} EcoPoints | 
                     📍 {option['route_match']}% route match
                     </p>
@@ -621,9 +437,27 @@ with tab2:
                 if st.button(f"Join Ride", key=f"join_{i}"):
                     st.session_state.user_points += option['eco_points']
                     st.session_state.carpools_joined += 1
-                    st.session_state.co2_saved += 2.5
+                    st.session_state.co2_saved += 2.5  # Estimated CO2 savings
                     st.success(f"🎉 Carpool booked with {option['driver']}!")
                     st.balloons()
+    
+    # Option to offer a ride
+    st.subheader("🚙 Offer a Ride")
+    
+    with st.expander("Become a Driver"):
+        col1, col2 = st.columns(2)
+        with col1:
+            st.text_input("Your Car Model")
+            st.number_input("Available Seats", min_value=1, max_value=4, value=2)
+        
+        with col2:
+            st.number_input("Cost per Person ($)", min_value=0.0, value=8.0, step=0.5)
+            st.text_area("Additional Notes (optional)")
+        
+        if st.button("Post Your Ride", type="secondary"):
+            reward_points = random.randint(20, 40)
+            st.session_state.user_points += reward_points
+            st.success(f"🚗 Ride posted successfully! +{reward_points} EcoPoints earned!")
 
 with tab3:
     st.header("🌱 Sustainability Dashboard")
@@ -647,11 +481,11 @@ with tab3:
         )
     
     with col3:
-        money_saved = st.session_state.co2_saved * 12
+        money_saved = st.session_state.co2_saved * 0.5  # Rough estimate
         st.metric(
-            label="💰 Fuel Money Saved",
-            value=f"₹{money_saved:.0f}",
-            delta=f"+₹180 this week"
+            label="💰 Gas Money Saved",
+            value=f"${money_saved:.0f}",
+            delta=f"+$12 this week"
         )
     
     # Weekly challenge
@@ -663,14 +497,60 @@ with tab3:
     
     if current_progress >= 100:
         st.success("🎉 Challenge completed! +100 bonus EcoPoints!")
+    
+    # Sustainability tips
+    st.subheader("💡 Eco-Friendly Tips")
+    
+    tips = [
+        "🚗 Carpool 2+ times per week to reduce emissions by 50%",
+        "🚴‍♂ Try bike routes for trips under 5km",
+        "🚌 Use public transport during peak hours to avoid traffic",
+        "⚡ Choose electric or hybrid vehicles for eco points bonus",
+        "📱 Plan combined trips to reduce total distance traveled"
+    ]
+    
+    for tip in random.sample(tips, 3):
+        st.info(tip)
+    
+    # Carbon footprint tracker
+    st.subheader("📊 Monthly Carbon Footprint")
+    
+    # Generate sample data for chart
+    dates = [datetime.now() - timedelta(days=x) for x in range(30, 0, -1)]
+    co2_data = [random.uniform(0.5, 3.0) for _ in dates]
+    
+    chart_data = pd.DataFrame({
+        'Date': dates,
+        'CO₂ Emissions (kg)': co2_data
+    })
+    
+    st.line_chart(chart_data.set_index('Date'))
+    
+    # Leaderboard
+    st.subheader("🏅 Community Leaderboard")
+    
+    leaderboard_data = {
+        'Rank': [1, 2, 3, 4, 5],
+        'User': ['EcoWarrior23', 'GreenDriver', 'You', 'CarpoolKing', 'NatureLover'],
+        'EcoPoints': [1580, 1420, st.session_state.user_points, 1180, 1050],
+        'CO₂ Saved (kg)': [72.3, 64.1, st.session_state.co2_saved, 53.2, 47.8]
+    }
+    
+    leaderboard_df = pd.DataFrame(leaderboard_data)
+    st.dataframe(leaderboard_df, use_container_width=True)
+    
+    # Rewards redemption history
+    with st.expander("🎁 Rewards History"):
+        st.write("Recent redemptions:")
+        st.write("• ☕ Free Coffee - 100 points (2 days ago)")
+        st.write("• 🌳 Plant a Tree - 200 points (1 week ago)")
+        st.write("• ⛽ Gas Voucher - 250 points (2 weeks ago)")
 
 # Footer
 st.markdown("---")
 st.markdown("""
 <div style="text-align: center; color: #666; padding: 1rem;">
-    <p>🌱 <strong>MobiSync India</strong> - Making Hyderabad transportation smarter and more sustainable</p>
-    <p>Join the eco-friendly movement! Every trip counts towards a greener Hyderabad. 🇮🇳</p>
-    <p style="font-size: 0.9em;">Powered by Google Maps • Supporting Telangana's Green Transportation Initiative</p>
+    <p>🌱 <strong>MobiSync</strong> - Making transportation smarter and more sustainable</p>
+    <p>Join the eco-friendly movement! Every trip counts towards a greener future.</p>
 </div>
 """, unsafe_allow_html=True)
-
