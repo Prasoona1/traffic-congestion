@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 
 # Set page configuration
 st.set_page_config(
-    page_title="MobiSync Route Optimization",
+    page_title="MobiSync India - Hyderabad Route Optimization",
     page_icon="🚦",
     layout="wide"
 )
@@ -30,27 +30,27 @@ st.markdown("""
 .title {
     font-size: 2rem;
     font-weight: bold;
-    color: #1E88E5;
+    color: #FF6B35;
     text-align: center;
 }
 .route-card {
     padding: 1rem;
     border-radius: 0.5rem;
     margin-bottom: 1rem;
-    border-left: 4px solid #1E88E5;
+    border-left: 4px solid #FF6B35;
 }
 .carpool-card {
     padding: 1rem;
     border-radius: 0.5rem;
     margin-bottom: 1rem;
     border: 2px solid #4CAF50;
-    background-color: yellow;
+    background-color: #E8F5E8;
 }
 .sustainability-card {
     padding: 1rem;
     border-radius: 0.5rem;
     margin-bottom: 1rem;
-    background-color: brown;
+    background-color: #138808;
     color: white;
 }
 .reward-badge {
@@ -66,9 +66,10 @@ st.markdown("""
     display: flex;
     justify-content: space-around;
     padding: 1rem;
-    background-color: brown;
+    background-color: #138808;
     border-radius: 0.5rem;
     margin: 1rem 0;
+    color: white;
 }
 .metric-item {
     text-align: center;
@@ -77,7 +78,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Title
-st.markdown('<p class="title">🚦 MobiSync Route Optimization</p>', unsafe_allow_html=True)
+st.markdown('<p class="title">🚦 MobiSync India - Hyderabad Route Optimization</p>', unsafe_allow_html=True)
 
 # Sidebar for user profile and rewards
 with st.sidebar:
@@ -111,10 +112,12 @@ with st.sidebar:
     # Rewards store
     st.subheader("🎁 Rewards Store")
     rewards = [
-        {"name": "Free Coffee", "points": 100, "icon": "☕"},
-        {"name": "Gas Voucher $5", "points": 250, "icon": "⛽"},
+        {"name": "Free Chai", "points": 100, "icon": "☕"},
+        {"name": "Petrol Voucher ₹300", "points": 250, "icon": "⛽"},
         {"name": "Premium Features", "points": 500, "icon": "⭐"},
-        {"name": "Plant a Tree", "points": 200, "icon": "🌳"}
+        {"name": "Plant a Tree", "points": 200, "icon": "🌳"},
+        {"name": "Metro Card Top-up ₹200", "points": 180, "icon": "🚇"},
+        {"name": "Swiggy Voucher ₹150", "points": 150, "icon": "🍽"}
     ]
     
     for reward in rewards:
@@ -148,21 +151,27 @@ def generate_route_coords(start_coords, end_coords, variation=0.01):
 # Function to create a map with routes and carpool pickup points
 def create_route_map(start_loc, end_loc, routes, carpool_points=None):
     """Create a map with multiple route options and carpool pickup points"""
+    # Hyderabad locations with real coordinates
     locations = {
-        "City Center": [40.712, -74.006],
-        "Airport": [40.640, -73.779],
-        "Downtown": [40.702, -74.015],
-        "Midtown": [40.754, -73.984],
-        "Brooklyn": [40.678, -73.944],
-        "Queens": [40.728, -73.794],
-        "Bronx": [40.837, -73.846],
-        "Central Park": [40.785, -73.968],
-        "Times Square": [40.758, -73.985],
-        "Financial District": [40.707, -74.011]
+        "HITEC City": [17.4435, 78.3772],
+        "Rajiv Gandhi International Airport": [17.2403, 78.4294],
+        "Secunderabad": [17.4399, 78.4983],
+        "Banjara Hills": [17.4126, 78.4482],
+        "Jubilee Hills": [17.4239, 78.4738],
+        "Gachibowli": [17.4399, 78.3482],
+        "Kukatpally": [17.4850, 78.4867],
+        "Begumpet": [17.4504, 78.4677],
+        "Charminar": [17.3616, 78.4747],
+        "Tank Bund": [17.4126, 78.4747],
+        "Kondapur": [17.4617, 78.3617],
+        "Madhapur": [17.4483, 78.3915],
+        "Ameerpet": [17.4375, 78.4482],
+        "Miyapur": [17.5067, 78.3592],
+        "LB Nagar": [17.3498, 78.5522]
     }
     
-    start_coords = locations.get(start_loc, locations["City Center"])
-    end_coords = locations.get(end_loc, locations["Airport"])
+    start_coords = locations.get(start_loc, locations["HITEC City"])
+    end_coords = locations.get(end_loc, locations["Rajiv Gandhi International Airport"])
     
     center_lat = (start_coords[0] + end_coords[0]) / 2
     center_lng = (start_coords[1] + end_coords[1]) / 2
@@ -213,9 +222,9 @@ def create_route_map(start_loc, end_loc, routes, carpool_points=None):
 
 # Function to generate carpool options
 def generate_carpool_options():
-    """Generate sample carpool options"""
-    names = ["Sarah M.", "Mike R.", "Jessica L.", "David K.", "Amanda S."]
-    cars = ["Toyota Camry", "Honda Accord", "Tesla Model 3", "BMW 3 Series", "Nissan Altima"]
+    """Generate sample carpool options with Indian names and cars"""
+    names = ["Priya S.", "Rajesh K.", "Anita M.", "Vikram R.", "Sneha P.", "Arjun T.", "Kavya L."]
+    cars = ["Maruti Swift", "Hyundai i20", "Honda City", "Toyota Innova", "Tata Nexon", "Mahindra XUV300", "Kia Seltos"]
     
     carpool_options = []
     for i in range(3):
@@ -225,7 +234,7 @@ def generate_carpool_options():
             "rating": round(random.uniform(4.5, 5.0), 1),
             "departure_time": f"{random.randint(7, 9)}:{random.choice(['00', '15', '30', '45'])} AM",
             "available_seats": random.randint(1, 3),
-            "cost_per_person": round(random.uniform(5, 15), 2),
+            "cost_per_person": round(random.uniform(50, 200), 0),  # In Rupees
             "eco_points": random.randint(15, 30),
             "route_match": random.randint(85, 98)
         }
@@ -243,6 +252,8 @@ def calculate_environmental_impact(distance_km, transport_mode, passengers=1):
         "carpool_3": 0.07,   # Split between 3 people
         "carpool_4": 0.0525, # Split between 4 people
         "public_transport": 0.05,
+        "metro": 0.03,       # Hyderabad Metro
+        "auto_rickshaw": 0.15,
         "bike": 0,
         "walk": 0
     }
@@ -262,14 +273,14 @@ def calculate_environmental_impact(distance_km, transport_mode, passengers=1):
 tab1, tab2, tab3 = st.tabs(["🗺 Route Planning", "🚗 Carpooling", "🌱 Sustainability Tracker"])
 
 with tab1:
-    st.header("Smart Route Optimization")
+    st.header("Smart Route Optimization - Hyderabad")
     
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("Starting Point")
         start_location = st.selectbox(
             "Select start location", 
-            ["City Center", "Downtown", "Midtown", "Brooklyn", "Queens", "Central Park"],
+            ["HITEC City", "Secunderabad", "Banjara Hills", "Jubilee Hills", "Gachibowli", "Kukatpally", "Begumpet"],
             index=0
         )
 
@@ -277,7 +288,7 @@ with tab1:
         st.markdown("Destination")
         end_location = st.selectbox(
             "Select destination", 
-            ["Airport", "Financial District", "Times Square", "Bronx", "Brooklyn", "Queens"],
+            ["Rajiv Gandhi International Airport", "Charminar", "Tank Bund", "Kondapur", "Madhapur", "Ameerpet", "Miyapur", "LB Nagar"],
             index=0
         )
 
@@ -286,7 +297,7 @@ with tab1:
     col1, col2 = st.columns(2)
     with col1:
         avoid_tolls = st.checkbox("Avoid toll roads", False)
-        avoid_highways = st.checkbox("Avoid highways", False)
+        avoid_highways = st.checkbox("Avoid ORR (Outer Ring Road)", False)
         eco_mode = st.checkbox("🌱 Eco-friendly priority", False)
 
     with col2:
@@ -304,35 +315,38 @@ with tab1:
 
     if st.button("Find Routes", type="primary"):
         base_distance = 15 + random.uniform(-3, 3)
-        base_time = 25 + random.uniform(-5, 5)
+        base_time = 35 + random.uniform(-10, 10)  # Adjusted for Hyderabad traffic
         
         routes = [
             {
-                'name': 'Fastest Route',
-                'distance_km': base_distance + random.uniform(0, 2),
-                'time_min': base_time * (1.2 if avoid_highways else 1.0),
+                'name': 'Fastest Route (via ORR)',
+                'distance_km': base_distance + random.uniform(2, 5),
+                'time_min': base_time * (1.3 if avoid_highways else 1.0),
                 'congestion': random.uniform(0.6, 0.8),
                 'tolls': not avoid_tolls,
                 'highways': not avoid_highways,
-                'eco_rating': random.randint(6, 8)
+                'eco_rating': random.randint(6, 8),
+                'fuel_cost': round((base_distance * 8), 0)  # Rough fuel cost in INR
             },
             {
                 'name': 'Eco-Friendly Route',
-                'distance_km': base_distance * 0.95,
-                'time_min': base_time * 1.15,
+                'distance_km': base_distance * 0.9,
+                'time_min': base_time * 1.2,
                 'congestion': random.uniform(0.4, 0.6),
                 'tolls': False,
                 'highways': False,
-                'eco_rating': random.randint(8, 10)
+                'eco_rating': random.randint(8, 10),
+                'fuel_cost': round((base_distance * 0.9 * 8), 0)
             },
             {
-                'name': 'Balanced Route',
-                'distance_km': base_distance * 1.05,
-                'time_min': base_time * 1.1,
-                'congestion': random.uniform(0.5, 0.7),
-                'tolls': random.choice([True, False]),
-                'highways': random.choice([True, False]),
-                'eco_rating': random.randint(7, 9)
+                'name': 'City Route (via Mehdipatnam)',
+                'distance_km': base_distance * 1.1,
+                'time_min': base_time * 1.4,
+                'congestion': random.uniform(0.7, 0.9),
+                'tolls': False,
+                'highways': False,
+                'eco_rating': random.randint(7, 9),
+                'fuel_cost': round((base_distance * 1.1 * 8), 0)
             }
         ]
         
@@ -346,38 +360,39 @@ with tab1:
                 impact = calculate_environmental_impact(route['distance_km'], "solo_driving")
                 
                 if i == 0:
-                    card_color = "#38b6ff"
+                    card_color = "#FF6B35"
                     text_color = "white"
-                    recommended_text = "✅ RECOMMENDED"
+                    recommended_text = "⚡ FASTEST"
                 elif route['name'] == 'Eco-Friendly Route':
                     card_color = "#4CAF50"
                     text_color = "white"
                     recommended_text = "🌱 ECO CHOICE"
                 else:
-                    card_color = "#ff5757"
+                    card_color = "#2196F3"
                     text_color = "white"
-                    recommended_text = ""
+                    recommended_text = "🏙 CITY ROUTE"
                 
                 st.markdown(f"""
                 <div class="route-card" style="background-color: {card_color}; color: {text_color};">
                     <h4>{route['name']} {recommended_text}</h4>
                     <p>
                     <strong>Distance:</strong> {route['distance_km']:.1f} km<br>
-                    <strong>Est. Time:</strong> {route['time_min']:.1f} minutes<br>
+                    <strong>Est. Time:</strong> {route['time_min']:.0f} minutes<br>
+                    <strong>Fuel Cost:</strong> ₹{route['fuel_cost']}<br>
                     <strong>Eco Rating:</strong> {route['eco_rating']}/10 🌱<br>
                     <strong>CO₂ Emissions:</strong> {impact['solo_emissions']:.2f} kg<br>
-                    <strong>Features:</strong> {"Uses toll roads" if route['tolls'] else "No tolls"}
+                    <strong>Features:</strong> {"Toll roads" if route['tolls'] else "No tolls"}
                     </p>
                 </div>
                 """, unsafe_allow_html=True)
         
         with col2:
-            st.subheader("Route Map")
+            st.subheader("Route Map - Hyderabad")
             route_map = create_route_map(start_location, end_location, routes)
             folium_static(route_map, width=700, height=500)
 
 with tab2:
-    st.header("🚗 Carpooling Hub")
+    st.header("🚗 Carpooling Hub - Hyderabad")
     
     st.markdown("""
     <div class="eco-metrics">
@@ -386,7 +401,7 @@ with tab2:
             <p>Carpools Joined</p>
         </div>
         <div class="metric-item">
-            <h3>💰 $180</h3>
+            <h3>💰 ₹2,400</h3>
             <p>Money Saved</p>
         </div>
         <div class="metric-item">
@@ -403,11 +418,11 @@ with tab2:
     # Carpool search
     col1, col2 = st.columns(2)
     with col1:
-        carpool_start = st.selectbox("From", ["City Center", "Downtown", "Midtown", "Brooklyn"], key="carpool_from")
+        carpool_start = st.selectbox("From", ["HITEC City", "Gachibowli", "Banjara Hills", "Secunderabad"], key="carpool_from")
         carpool_date = st.date_input("Travel Date", datetime.now())
     
     with col2:
-        carpool_end = st.selectbox("To", ["Airport", "Financial District", "Times Square", "Queens"], key="carpool_to")
+        carpool_end = st.selectbox("To", ["Rajiv Gandhi International Airport", "Charminar", "Kondapur", "Madhapur"], key="carpool_to")
         carpool_time = st.time_input("Departure Time", datetime.now().time())
     
     if st.button("Find Carpool Matches", type="primary"):
@@ -426,7 +441,7 @@ with tab2:
                     ⭐ Rating: {option['rating']}/5.0 | 
                     🕐 Departure: {option['departure_time']} | 
                     👥 {option['available_seats']} seats available<br>
-                    💰 ${option['cost_per_person']}/person | 
+                    💰 ₹{option['cost_per_person']:.0f}/person | 
                     🌱 +{option['eco_points']} EcoPoints | 
                     📍 {option['route_match']}% route match
                     </p>
@@ -447,12 +462,12 @@ with tab2:
     with st.expander("Become a Driver"):
         col1, col2 = st.columns(2)
         with col1:
-            st.text_input("Your Car Model")
+            st.text_input("Your Car Model", placeholder="e.g., Maruti Swift")
             st.number_input("Available Seats", min_value=1, max_value=4, value=2)
         
         with col2:
-            st.number_input("Cost per Person ($)", min_value=0.0, value=8.0, step=0.5)
-            st.text_area("Additional Notes (optional)")
+            st.number_input("Cost per Person (₹)", min_value=0, value=100, step=10)
+            st.text_area("Additional Notes (optional)", placeholder="AC available, pet-friendly, etc.")
         
         if st.button("Post Your Ride", type="secondary"):
             reward_points = random.randint(20, 40)
@@ -481,11 +496,11 @@ with tab3:
         )
     
     with col3:
-        money_saved = st.session_state.co2_saved * 0.5  # Rough estimate
+        money_saved = st.session_state.co2_saved * 12  # Adjusted for Indian fuel prices
         st.metric(
-            label="💰 Gas Money Saved",
-            value=f"${money_saved:.0f}",
-            delta=f"+$12 this week"
+            label="💰 Fuel Money Saved",
+            value=f"₹{money_saved:.0f}",
+            delta=f"+₹180 this week"
         )
     
     # Weekly challenge
@@ -498,15 +513,17 @@ with tab3:
     if current_progress >= 100:
         st.success("🎉 Challenge completed! +100 bonus EcoPoints!")
     
-    # Sustainability tips
-    st.subheader("💡 Eco-Friendly Tips")
+    # Sustainability tips for Hyderabad
+    st.subheader("💡 Eco-Friendly Tips for Hyderabad")
     
     tips = [
-        "🚗 Carpool 2+ times per week to reduce emissions by 50%",
-        "🚴‍♂ Try bike routes for trips under 5km",
-        "🚌 Use public transport during peak hours to avoid traffic",
-        "⚡ Choose electric or hybrid vehicles for eco points bonus",
-        "📱 Plan combined trips to reduce total distance traveled"
+        "🚇 Use Hyderabad Metro during peak hours to avoid traffic and reduce emissions",
+        "🚗 Carpool from HITEC City to Gachibowli corridor - high demand route",
+        "🚴‍♂ Try bike routes within Banjara Hills and Jubilee Hills area",
+        "🚌 Use TSRTC buses for longer routes like Secunderabad to LB Nagar",
+        "⚡ Avoid ORR during rush hours (8-10 AM, 6-8 PM) to save fuel",
+        "🛵 Use electric scooters for short distances in tech corridors",
+        "📱 Plan combined trips to Forum Mall, Inorbit, or other shopping areas"
     ]
     
     for tip in random.sample(tips, 3):
@@ -517,7 +534,7 @@ with tab3:
     
     # Generate sample data for chart
     dates = [datetime.now() - timedelta(days=x) for x in range(30, 0, -1)]
-    co2_data = [random.uniform(0.5, 3.0) for _ in dates]
+    co2_data = [random.uniform(0.5, 4.0) for _ in dates]  # Higher for Indian traffic conditions
     
     chart_data = pd.DataFrame({
         'Date': dates,
@@ -527,11 +544,11 @@ with tab3:
     st.line_chart(chart_data.set_index('Date'))
     
     # Leaderboard
-    st.subheader("🏅 Community Leaderboard")
+    st.subheader("🏅 Hyderabad Community Leaderboard")
     
     leaderboard_data = {
         'Rank': [1, 2, 3, 4, 5],
-        'User': ['EcoWarrior23', 'GreenDriver', 'You', 'CarpoolKing', 'NatureLover'],
+        'User': ['EcoWarriorHyd', 'GreenCommuter', 'You', 'CarpoolKing_Gachi', 'MetroLover'],
         'EcoPoints': [1580, 1420, st.session_state.user_points, 1180, 1050],
         'CO₂ Saved (kg)': [72.3, 64.1, st.session_state.co2_saved, 53.2, 47.8]
     }
@@ -539,18 +556,33 @@ with tab3:
     leaderboard_df = pd.DataFrame(leaderboard_data)
     st.dataframe(leaderboard_df, use_container_width=True)
     
+    # Public transport integration
+    st.subheader("🚇 Public Transport Integration")
+    
+    transport_options = {
+        "Hyderabad Metro": "₹10-40 per trip, connects major tech hubs",
+        "TSRTC City Bus": "₹5-25 per trip, extensive network coverage",
+        "Auto Rickshaw": "₹15-100 depending on distance",
+        "Ola/Uber Share": "₹50-200, convenient door-to-door service"
+    }
+    
+    for transport, details in transport_options.items():
+        st.write(f"• *{transport}*: {details}")
+    
     # Rewards redemption history
     with st.expander("🎁 Rewards History"):
         st.write("Recent redemptions:")
-        st.write("• ☕ Free Coffee - 100 points (2 days ago)")
-        st.write("• 🌳 Plant a Tree - 200 points (1 week ago)")
-        st.write("• ⛽ Gas Voucher - 250 points (2 weeks ago)")
+        st.write("• ☕ Free Chai at Chai Point - 100 points (2 days ago)")
+        st.write("• 🌳 Plant a Tree in KBR Park - 200 points (1 week ago)")
+        st.write("• ⛽ Petrol Voucher ₹300 - 250 points (2 weeks ago)")
+        st.write("• 🚇 Metro Card Top-up ₹200 - 180 points (3 weeks ago)")
 
 # Footer
 st.markdown("---")
 st.markdown("""
 <div style="text-align: center; color: #666; padding: 1rem;">
-    <p>🌱 <strong>MobiSync</strong> - Making transportation smarter and more sustainable</p>
-    <p>Join the eco-friendly movement! Every trip counts towards a greener future.</p>
+    <p>🌱 <strong>MobiSync India</strong> - Making Hyderabad transportation smarter and more sustainable</p>
+    <p>Join the eco-friendly movement! Every trip counts towards a greener Hyderabad. 🇮🇳</p>
+    <p style="font-size: 0.9em;">Supporting Telangana's Green Transportation Initiative</p>
 </div>
 """, unsafe_allow_html=True)
