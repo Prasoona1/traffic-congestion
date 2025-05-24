@@ -672,4 +672,5 @@ st.markdown("""
     <p>Join the eco-friendly movement! Every trip counts towards a greener Hyderabad. 🇮🇳</p>
     <p style="font-size: 0.9em;">Powered by Google Maps • Supporting Telangana's Green Transportation Initiative</p>
 </div>
-""
+""", unsafe_allow_html=True)
+
