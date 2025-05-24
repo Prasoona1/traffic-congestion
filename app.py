@@ -25,7 +25,7 @@ if 'carpools_joined' not in st.session_state:
 
 # Google Maps API Configuration
 # Note: In production, store this in environment variables or Streamlit secrets
-GOOGLE_MAPS_API_KEY = st.secrets.get("GOOGLE_MAPS_API_KEY", "YOUR_API_KEY_HERE")
+GOOGLE_MAPS_API_KEY = st.secrets.get("GOOGLE_MAPS_API_KEY", "AIzaSyCnm7N-Gsp0XPA3CIC8n9uByuFs-HG9v8U")
 
 # Custom CSS (keeping the original styling)
 st.markdown("""
@@ -210,7 +210,7 @@ HYDERABAD_LOCATIONS = {
 st.markdown('<p class="title">🚦 MobiSync India - Hyderabad Route Optimization</p>', unsafe_allow_html=True)
 
 # API Key Configuration
-if GOOGLE_MAPS_API_KEY == "YOUR_API_KEY_HERE":
+if GOOGLE_MAPS_API_KEY == "AIzaSyCnm7N-Gsp0XPA3CIC8n9uByuFs-HG9v8U":
     st.warning("⚠ Google Maps API key not configured. Please add your API key to Streamlit secrets.")
     st.info("To use Google Maps integration, add your API key in Streamlit Cloud secrets or .streamlit/secrets.toml")
 
